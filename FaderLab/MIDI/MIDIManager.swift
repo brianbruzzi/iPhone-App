@@ -220,12 +220,26 @@ final class MIDIManager {
         send(bytes, to: xTouchDestination)
     }
 
-    /// Turns off every Mackie Control button LED (notes 0...118).
-    func sendXTouchAllLEDsOff() {
-        let messages = (UInt8(0)...UInt8(118)).map { [0x90, $0, 0x00] }
+    /// Turns off every Mackie Control button LED (notes 0...118) and drops all faders to
+    /// zero — i.e. puts the surface back to a blank state after testing.
+    func sendXTouchResetSurface(includeFaders: Bool = true) {
         guard let destination = xTouchDestination else { return }
         monitor.recordOutgoing([0x90, 0x00, 0x00], force: true)
-        sendBatch(messages, to: destination)
+
+        // Chunked: 119 three-byte messages coalesce well past a single packet's 256-byte
+        // data capacity, so hand CoreMIDI a manageable list at a time.
+        let ledMessages = (UInt8(0)...UInt8(118)).map { [0x90, $0, 0x00] }
+        for chunk in stride(from: 0, to: ledMessages.count, by: 32) {
+            let slice = Array(ledMessages[chunk..<min(chunk + 32, ledMessages.count)])
+            sendBatch(slice, to: destination)
+        }
+
+        if includeFaders {
+            let faderMessages = (0..<XTouchProtocol.faderCount).map {
+                XTouchProtocol.pitchBendBytes(fader: $0, unitValue: 0)
+            }
+            sendBatch(faderMessages, to: destination)
+        }
     }
 
     func sendLaunchpadFrame(_ grid: PixelGrid) {
@@ -259,12 +273,17 @@ final class MIDIManager {
 
     /// Packs several short messages into one `MIDIPacketList` and sends it once. The fader
     /// path emits 9 messages every tick at 30Hz; batching turns 270 sends/sec into 30.
+    ///
+    /// If batching fails for any reason, this falls back to sending each message on its
+    /// own rather than dropping the frame — a bad batch should degrade performance, never
+    /// silence the output.
     private func sendBatch(_ messages: [[UInt8]], to destination: MIDIEndpointRef) {
         guard outputPort != 0, !messages.isEmpty else { return }
 
-        // Header + per-packet overhead (timestamp 8 + length 2) + payload, with slack.
-        let byteCount = messages.reduce(0) { $0 + $1.count + 16 }
-        let bufferSize = max(1024, byteCount + 64)
+        // Worst case is every message landing in its own packet: 8-byte timestamp +
+        // 2-byte length + payload, rounded up for alignment, plus the list header.
+        let perMessage = messages.reduce(0) { $0 + $1.count + 16 }
+        let bufferSize = max(1024, perMessage + 256)
 
         let raw = UnsafeMutableRawPointer.allocate(
             byteCount: bufferSize,
@@ -274,23 +293,57 @@ final class MIDIManager {
 
         let packetList = raw.bindMemory(to: MIDIPacketList.self, capacity: 1)
         var packet = MIDIPacketListInit(packetList)
+        var packedAll = true
 
         for message in messages {
-            // MIDIPacketListAdd returns NULL if the message doesn't fit, but the SDK
-            // declares the return type as non-optional, so check that the packet count
-            // actually advanced instead of nil-testing the pointer. The buffer is sized
-            // from the real message lengths above, so this should never trip.
-            let countBefore = packetList.pointee.numPackets
-            packet = MIDIPacketListAdd(packetList, bufferSize, packet, 0, message.count, message)
-            guard packetList.pointee.numPackets > countBefore else {
-                reportError("MIDI buffer overflow while packing \(messages.count) messages")
-                return
+            let next = MIDIPacketListAdd(packetList, bufferSize, packet, 0, message.count, message)
+            // MIDIPacketListAdd returns NULL when a message won't fit. The SDK declares the
+            // return as non-optional, so test the address rather than nil-checking.
+            //
+            // Do NOT test whether numPackets grew: messages sharing a timestamp are
+            // deliberately coalesced into one packet, so the count stays put on every
+            // message after the first. Treating that as failure made every multi-message
+            // send (the 9-fader frame, the all-LEDs-off sweep) bail out silently.
+            guard UInt(bitPattern: UnsafeRawPointer(next)) != 0 else {
+                packedAll = false
+                break
             }
+            packet = next
+        }
+
+        guard packedAll else {
+            sendIndividually(messages, to: destination)
+            return
         }
 
         let status = MIDISend(outputPort, destination, packetList)
         if status != noErr {
             reportError("MIDISend failed with error \(status)")
+        }
+    }
+
+    /// One `MIDISend` per message. Slower, but immune to any packing problem.
+    private func sendIndividually(_ messages: [[UInt8]], to destination: MIDIEndpointRef) {
+        for message in messages {
+            let bufferSize = max(512, message.count + 64)
+            let raw = UnsafeMutableRawPointer.allocate(
+                byteCount: bufferSize,
+                alignment: MemoryLayout<MIDIPacketList>.alignment
+            )
+            defer { raw.deallocate() }
+
+            let packetList = raw.bindMemory(to: MIDIPacketList.self, capacity: 1)
+            let packet = MIDIPacketListInit(packetList)
+            let next = MIDIPacketListAdd(packetList, bufferSize, packet, 0, message.count, message)
+            guard UInt(bitPattern: UnsafeRawPointer(next)) != 0 else {
+                reportError("Couldn't pack a \(message.count)-byte MIDI message")
+                continue
+            }
+
+            let status = MIDISend(outputPort, destination, packetList)
+            if status != noErr {
+                reportError("MIDISend failed with error \(status)")
+            }
         }
     }
 

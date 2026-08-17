@@ -8,6 +8,7 @@ import FaderLabCore
 struct DiagnosticsView: View {
     @Environment(AppState.self) private var appState
     @State private var isExpanded = false
+    @State private var testLEDOn = false
 
     private var midi: MIDIManager { appState.midiManager }
 
@@ -98,8 +99,9 @@ struct DiagnosticsView: View {
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 8) {
-                Button("Light SELECT 1") {
-                    midi.sendXTouchTestButtonLED(note: 24, on: true)
+                Button(testLEDOn ? "Turn SELECT 1 off" : "Light SELECT 1") {
+                    testLEDOn.toggle()
+                    midi.sendXTouchTestButtonLED(note: 24, on: testLEDOn)
                 }
                 Button("Fader 1 → middle (MC)") {
                     midi.sendXTouchTestFader(fader: 0, unitValue: 0.5, mode: .mackieControl)
@@ -111,8 +113,11 @@ struct DiagnosticsView: View {
             .disabled(!midi.xTouchPortsFound)
 
             HStack(spacing: 8) {
-                Button("All LEDs off") { midi.sendXTouchAllLEDsOff() }
-                    .disabled(!midi.xTouchPortsFound)
+                Button("Reset X-Touch (lights off, faders down)") {
+                    testLEDOn = false
+                    midi.sendXTouchResetSurface()
+                }
+                .disabled(!midi.xTouchPortsFound)
                 Button("Launchpad: all pads off") { midi.sendLaunchpadClearAll() }
                     .disabled(!midi.launchpadPortsFound)
                 Button("Launchpad: re-enter Programmer mode") { midi.sendLaunchpadProgrammerMode(true) }
