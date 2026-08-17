@@ -8,6 +8,8 @@ struct FaderControlView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Faders (X-Touch)").font(.headline)
 
+            FaderBarsPreviewView(values: appState.latestFaderValues)
+
             Picker("Pattern", selection: $appState.faderPatternID) {
                 ForEach(PatternOptions.faders) { option in
                     Text(option.displayName).tag(option.id)

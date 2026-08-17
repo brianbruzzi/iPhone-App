@@ -10,6 +10,10 @@ struct DeviceStatusView: View {
             statusRow(name: "Behringer X-Touch", connected: appState.midiManager.xTouchConnected)
             statusRow(name: "Novation Launchpad X", connected: appState.midiManager.launchpadConnected)
 
+            Text("Neither device is required — the previews below the pattern pickers show exactly what would be sent, even with nothing plugged in.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             if let error = appState.midiStartError {
                 Text(error).font(.caption).foregroundStyle(.red)
             }

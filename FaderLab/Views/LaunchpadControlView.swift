@@ -8,6 +8,9 @@ struct LaunchpadControlView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Pixel Art (Launchpad X)").font(.headline)
 
+            PixelGridPreviewView(grid: appState.latestPadGrid)
+                .frame(width: 220, height: 220)
+
             Picker("Pattern", selection: $appState.padPatternID) {
                 ForEach(PatternOptions.pads) { option in
                     Text(option.displayName).tag(option.id)

@@ -31,6 +31,11 @@ final class AppState {
     private(set) var midiStartError: String?
     private(set) var audioLoadError: String?
 
+    /// Mirrors exactly what's being sent to the hardware, so the UI can preview both
+    /// patterns on screen even without the X-Touch/Launchpad physically connected.
+    private(set) var latestFaderValues = [Double](repeating: 0.5, count: XTouchProtocol.faderCount)
+    private(set) var latestPadGrid = PixelGrid.allBlack
+
     private var startHostTime: TimeInterval = 0
     private var tickTimer: DispatchSourceTimer?
     private var lastSentPadGrid: PixelGrid?
@@ -84,9 +89,18 @@ final class AppState {
         }
 
         patternEngine.onFaderFrame = { [weak self] values in
-            self?.sendFaderFrame(values)
+            guard let self else { return }
+            // NaN means "no automation this tick" (touched/manual-off) — keep showing the
+            // last known position for that fader rather than propagating NaN into the UI.
+            var display = self.latestFaderValues
+            for (index, value) in values.enumerated() where !value.isNaN {
+                display[index] = value
+            }
+            self.latestFaderValues = display
+            self.sendFaderFrame(values)
         }
         patternEngine.onPadFrame = { [weak self] grid in
+            self?.latestPadGrid = grid
             self?.sendPadFrame(grid)
         }
     }

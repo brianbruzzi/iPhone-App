@@ -1,0 +1,48 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Test core package, build app
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Run FaderLabCore tests
+        run: |
+          cd FaderLabCore
+          swift test
+
+      - name: Build FaderLab.app (unsigned, for local testing)
+        run: |
+          xcodebuild \
+            -project FaderLab.xcodeproj \
+            -scheme FaderLab \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Zip the built app
+        run: |
+          cd build/Build/Products/Release
+          ditto -c -k --sequesterRsrc --keepParent FaderLab.app FaderLab.zip
+
+      - name: Upload FaderLab.app
+        uses: actions/upload-artifact@v4
+        with:
+          name: FaderLab-app
+          path: build/Build/Products/Release/FaderLab.zip
+          retention-days: 30
