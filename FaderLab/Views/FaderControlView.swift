@@ -5,19 +5,7 @@ struct FaderControlView: View {
 
     var body: some View {
         @Bindable var appState = appState
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Faders (X-Touch)").font(.headline)
-                Spacer()
-                Button {
-                    appState.resetFaderSettings()
-                } label: {
-                    Label("Reset", systemImage: "arrow.counterclockwise")
-                }
-                .buttonStyle(.borderless)
-                .font(.caption)
-            }
-
+        PreviewCard(title: "Faders (X-Touch)", onReset: { appState.resetFaderSettings() }) {
             FaderBarsPreviewView(values: appState.latestFaderValues)
 
             Picker("Pattern", selection: $appState.faderPatternID) {
@@ -30,7 +18,6 @@ struct FaderControlView: View {
             LabeledSlider(label: "Amplitude", value: $appState.faderAmplitude, range: 0...1, defaultValue: AppState.defaultFaderAmplitude)
             LabeledSlider(label: "Base Level", value: $appState.faderBaseLevel, range: 0...1, defaultValue: AppState.defaultFaderBaseLevel)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -15,6 +15,9 @@ enum PatternOptions {
     static let pads: [PatternOption] = PadPatterns.all.map {
         PatternOption(id: type(of: $0).id, displayName: type(of: $0).displayName)
     }
+    static let surface: [PatternOption] = SurfacePatterns.all.map {
+        PatternOption(id: type(of: $0).id, displayName: type(of: $0).displayName)
+    }
 }
 
 /// A slider with a label, live numeric readout, a tick mark showing where the default

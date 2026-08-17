@@ -124,6 +124,17 @@ struct DiagnosticsView: View {
                     .disabled(!midi.launchpadPortsFound)
             }
 
+            HStack(spacing: 8) {
+                Button("Scribble strip color test") { midi.sendXTouchTestScribbleColors() }
+                    .disabled(!midi.xTouchPortsFound)
+                Button("Encoder ring sweep test") { midi.sendXTouchTestRingSweep() }
+                    .disabled(!midi.xTouchPortsFound)
+            }
+            Text("If the scribble strips don't change color, the unit's firmware is likely older than 1.22 — everything else still works.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             if !midi.xTouchPortsFound {
                 Text("No X-Touch port selected — pick one under Devices above.")
                     .font(.caption)
@@ -197,7 +208,7 @@ struct DiagnosticsView: View {
                     .font(.caption)
             }
 
-            Text("Outgoing fader traffic is sampled (it runs ~30x/second); incoming is shown in full.")
+            Text("Outgoing traffic is sampled (patterns tick up to 60x/second); incoming is shown in full.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 

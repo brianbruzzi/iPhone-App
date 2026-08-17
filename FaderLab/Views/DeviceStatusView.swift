@@ -3,13 +3,37 @@ import CoreMIDI
 
 struct DeviceStatusView: View {
     @Environment(AppState.self) private var appState
+    @State private var isExpanded = false
 
     private var midi: MIDIManager { appState.midiManager }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Devices").font(.headline)
+    private var allPortsFound: Bool {
+        midi.xTouchPortsFound && midi.launchpadPortsFound
+    }
 
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            content
+                .padding(.top, 8)
+        } label: {
+            HStack {
+                Image(systemName: "cable.connector")
+                Text("Setup & Devices").font(.headline)
+                Circle()
+                    .fill(allPortsFound ? Color.green : Color.orange)
+                    .frame(width: 8, height: 8)
+                if let error = appState.midiStartError ?? midi.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 8) {
             statusRow(
                 name: "Behringer X-Touch",
                 found: midi.xTouchPortsFound,

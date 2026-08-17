@@ -91,6 +91,17 @@ final class MIDIManager {
     /// anything else changed the pads out from under it.
     private var lastSentPadGrid: PixelGrid?
 
+    /// Delta-gates outgoing fader targets so an unchanged value is never resent — the fix
+    /// for the motorized faders' audible buzz while a pattern holds still. See
+    /// `FaderFrameGate`'s doc comment for why inbound position-feedback must never
+    /// invalidate this.
+    private let faderFrameGate = FaderFrameGate()
+
+    /// Mirrors `lastSentPadGrid`'s role for the X-Touch's buttons/rings/scribble strips:
+    /// the one record of what's actually lit, shared by the pattern path and every
+    /// diagnostics action that bypasses it.
+    private var lastSentSurfaceFrame: SurfaceFrame?
+
     enum SurfaceModeSetting: String, CaseIterable, Identifiable {
         case auto
         case mackieControl
@@ -181,28 +192,21 @@ final class MIDIManager {
         launchpadPortsFound = false
         wasLaunchpadDestinationPresent = false
         lastSentPadGrid = nil
+        faderFrameGate.invalidateAll()
+        lastSentSurfaceFrame = nil
         isStarted = false
     }
 
     // MARK: - Outbound
 
-    /// Sends all 9 fader positions in a single packet list. `values` are 0...1, with `.nan`
-    /// meaning "skip this fader" (user is touching it, or automation is off).
+    /// Sends only the fader positions that actually changed since the last call, in a
+    /// single packet list. `values` are 0...1, with `.nan` meaning "skip this fader" (user
+    /// is touching it, or automation is off). Delta-gating (see `FaderFrameGate`) is what
+    /// stops the motors from audibly buzzing while a pattern holds a fader still.
     func sendXTouchFaderFrame(_ values: [Double]) {
         guard let destination = xTouchDestination, outputPort != 0 else { return }
 
-        var messages: [[UInt8]] = []
-        messages.reserveCapacity(values.count)
-        for (index, value) in values.enumerated() where !value.isNaN {
-            switch effectiveSurfaceMode {
-            case .mackieControl:
-                messages.append(XTouchProtocol.pitchBendBytes(fader: index, unitValue: value))
-            case .ctrl:
-                messages.append(XTouchCtrlProtocol.faderBytes(fader: index, unitValue: value))
-            case .hui:
-                return // Not drivable; the UI prompts the user to switch the hardware mode.
-            }
-        }
+        let messages = faderFrameGate.messages(for: values, mode: effectiveSurfaceMode)
         guard !messages.isEmpty else { return }
 
         if let first = messages.first {
@@ -211,7 +215,9 @@ final class MIDIManager {
         sendBatch(messages, to: destination)
     }
 
-    /// Sends a single fader position — used by the diagnostics test buttons.
+    /// Sends a single fader position — used by the diagnostics test buttons. Bypasses the
+    /// gate, so the fader it touched is invalidated afterward: otherwise a pattern frame
+    /// landing on the same encoded value right after would be silently suppressed.
     func sendXTouchTestFader(fader: Int, unitValue: Double, mode: SurfaceMode) {
         let bytes: [UInt8]
         switch mode {
@@ -221,13 +227,46 @@ final class MIDIManager {
         }
         monitor.recordOutgoing(bytes, force: true)
         send(bytes, to: xTouchDestination)
+        faderFrameGate.invalidate(fader: fader)
     }
 
     /// Lights (or clears) a Mackie Control button LED — used by the diagnostics test buttons.
+    /// Bypasses the surface cache, so it's invalidated afterward to force a full repaint
+    /// next time a pattern frame runs, rather than trusting stale cached button state.
     func sendXTouchTestButtonLED(note: UInt8, on: Bool) {
         let bytes: [UInt8] = [0x90, note, on ? 0x7F : 0x00]
         monitor.recordOutgoing(bytes, force: true)
         send(bytes, to: xTouchDestination)
+        lastSentSurfaceFrame = nil
+    }
+
+    /// Sets every scribble strip to a distinct color in one shot. Also doubles as a
+    /// firmware probe: the color extension needs firmware >=1.22, and older units simply
+    /// ignore the message — so "the strips didn't change color" is itself the diagnostic.
+    func sendXTouchTestScribbleColors() {
+        let colors: [XTouchSurfaceProtocol.ScribbleColor] = [
+            .red, .green, .yellow, .blue, .magenta, .cyan, .white, .red
+        ]
+        let bytes = XTouchSurfaceProtocol.scribbleColorsMessage(colors)
+        monitor.recordOutgoing(bytes, force: true)
+        send(bytes, to: xTouchDestination)
+        lastSentSurfaceFrame = nil
+    }
+
+    /// Sets each of the 8 encoder rings to a different position in one shot, so a single
+    /// glance confirms every V-Pot ring actually responds — the least-certain zone of the
+    /// surface light show, since Behringer's V-Pot press notes (32-39) aren't independently
+    /// confirmed to drive LEDs on every unit.
+    func sendXTouchTestRingSweep() {
+        guard let destination = xTouchDestination else { return }
+        let messages = (0..<XTouchSurfaceProtocol.stripCount).map { strip in
+            XTouchSurfaceProtocol.ringBytes(strip: strip, display: .init(mode: .wrap, position: strip))
+        }
+        if let first = messages.first {
+            monitor.recordOutgoing(first, force: true)
+        }
+        sendBatch(messages, to: destination)
+        lastSentSurfaceFrame = nil
     }
 
     /// Turns off every Mackie Control button LED (notes 0...118) and drops all faders to
@@ -243,12 +282,43 @@ final class MIDIManager {
             let slice = Array(ledMessages[chunk..<min(chunk + 32, ledMessages.count)])
             sendBatch(slice, to: destination)
         }
+        // Bypasses both caches, so both must be invalidated: a pattern frame landing right
+        // after this must never trust stale "already lit/positioned" state.
+        lastSentSurfaceFrame = nil
 
         if includeFaders {
             let faderMessages = (0..<XTouchProtocol.faderCount).map {
                 XTouchProtocol.pitchBendBytes(fader: $0, unitValue: 0)
             }
             sendBatch(faderMessages, to: destination)
+            faderFrameGate.invalidateAll()
+        }
+    }
+
+    /// Sends only the surface elements (button LEDs, encoder rings, scribble strips) that
+    /// changed since the last frame. MC-mode only — Ctrl-mode LEDs use an incompatible
+    /// scheme, and this app doesn't attempt to translate the richer surface show to it.
+    func sendXTouchSurfaceFrame(_ frame: SurfaceFrame) {
+        guard let destination = xTouchDestination, outputPort != 0 else { return }
+        guard effectiveSurfaceMode == .mackieControl else {
+            // Leave the cache stale on purpose: switching back to MC later must always
+            // trigger a full repaint rather than trusting state from a different mode.
+            lastSentSurfaceFrame = nil
+            return
+        }
+
+        let messages = XTouchSurfaceDiff.messages(from: lastSentSurfaceFrame, to: frame)
+        guard !messages.isEmpty else { return }
+        lastSentSurfaceFrame = frame
+
+        if let first = messages.first {
+            monitor.recordOutgoing(first)
+        }
+        // Chunked like sendXTouchResetSurface: a full repaint is ~78 messages, well past
+        // what comfortably fits in one packet list.
+        for chunk in stride(from: 0, to: messages.count, by: 32) {
+            let slice = Array(messages[chunk..<min(chunk + 32, messages.count)])
+            sendBatch(slice, to: destination)
         }
     }
 
@@ -287,8 +357,9 @@ final class MIDIManager {
         sendBatch([bytes], to: destination)
     }
 
-    /// Packs several short messages into one `MIDIPacketList` and sends it once. The fader
-    /// path emits 9 messages every tick at 30Hz; batching turns 270 sends/sec into 30.
+    /// Packs several short messages into one `MIDIPacketList` and sends it once, so a frame
+    /// of several changed values (up to 9 faders, or a burst of surface diff messages)
+    /// costs one `MIDISend` instead of one per message.
     ///
     /// If batching fails for any reason, this falls back to sending each message on its
     /// own rather than dropping the frame — a bad batch should degrade performance, never
@@ -409,10 +480,17 @@ final class MIDIManager {
             self.monitor.recordIncoming(bytes)
 
             // Touch sense: check both protocols, since the surface's mode determines which
-            // note range it uses and the two ranges partially overlap.
+            // note range it uses and the two ranges partially overlap. On release, the
+            // fader gate must forget its cached value for this index: automation resumes
+            // with whatever the pattern outputs next, which may coincidentally match the
+            // encoded value the gate last sent before the touch — and without this, that
+            // coincidence would silently suppress the very message that un-freezes the
+            // motor from wherever the user's hand left it.
             if let touch = XTouchProtocol.decodeTouch(bytes) {
+                if !touch.touched { self.faderFrameGate.invalidate(fader: touch.fader) }
                 self.onXTouchFaderTouch?(touch.fader, touch.touched)
             } else if let touch = XTouchCtrlProtocol.decodeTouch(bytes) {
+                if !touch.touched { self.faderFrameGate.invalidate(fader: touch.fader) }
                 self.onXTouchFaderTouch?(touch.fader, touch.touched)
             } else if let position = XTouchProtocol.decodePitchBend(bytes) {
                 self.onXTouchFaderPositionReport?(position.fader, XTouchProtocol.unit(fromValue14: position.value14))
@@ -534,6 +612,10 @@ final class MIDIManager {
     func useManualXTouchDestination(_ endpoint: MIDIEndpointRef) {
         xTouchDestination = endpoint
         xTouchDestinationIsManual = true
+        // The new destination's actual hardware state is unknown, so both caches must
+        // repaint in full rather than trusting state that described a different endpoint.
+        faderFrameGate.invalidateAll()
+        lastSentSurfaceFrame = nil
         refreshStatus()
     }
 

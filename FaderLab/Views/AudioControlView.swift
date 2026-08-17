@@ -1,30 +1,35 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// A horizontal transport cluster — file picker, play/pause, elapsed time, live BPM, and
+/// manual BPM entry all in one row — meant to sit in the fixed `TransportBarView` at the
+/// top of the window rather than scroll away with the pattern cards below it.
 struct AudioControlView: View {
     @Environment(AppState.self) private var appState
     @State private var manualBPMText = "120"
     @State private var isImporterPresented = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Audio").font(.headline)
-
-            HStack {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 14) {
                 Button("Choose File…") { isImporterPresented = true }
+                    .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: [.audio]) { result in
+                        if case .success(let url) = result {
+                            appState.loadAudioFile(url: url)
+                        }
+                    }
+
                 if let url = appState.audioEngine.trackURL {
                     Text(url.lastPathComponent)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .frame(maxWidth: 160, alignment: .leading)
+                } else {
+                    Text("No track loaded")
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-            }
-            .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: [.audio]) { result in
-                if case .success(let url) = result {
-                    appState.loadAudioFile(url: url)
-                }
-            }
 
-            HStack(spacing: 16) {
                 Button(appState.audioEngine.isPlaying ? "Pause" : "Play") {
                     if appState.audioEngine.isPlaying {
                         appState.audioEngine.pause()
@@ -38,27 +43,30 @@ struct AudioControlView: View {
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
 
-                Spacer()
+                Divider().frame(height: 20)
 
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .leading, spacing: 0) {
                     Text("\(Int(appState.audioEngine.currentBPM.rounded())) BPM")
                         .monospacedDigit()
                     Text(isBeatLive ? "Live" : "Free-running")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-            }
 
-            HStack {
-                Text("Manual BPM")
-                TextField("BPM", text: $manualBPMText)
-                    .frame(width: 60)
-                    .textFieldStyle(.roundedBorder)
-                Button("Set") {
-                    if let bpm = Double(manualBPMText) {
-                        appState.audioEngine.setManualBPM(bpm)
+                HStack(spacing: 4) {
+                    Text("Manual BPM").font(.caption)
+                    TextField("BPM", text: $manualBPMText)
+                        .frame(width: 52)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Set") {
+                        if let bpm = Double(manualBPMText) {
+                            appState.audioEngine.setManualBPM(bpm)
+                        }
                     }
+                    .buttonStyle(.borderless)
                 }
+
+                Spacer(minLength: 0)
             }
 
             if let error = appState.audioLoadError {

@@ -1,43 +1,30 @@
 import SwiftUI
 
 struct ContentView: View {
-    @Environment(AppState.self) private var appState
+    private let cardColumns = [GridItem(.adaptive(minimum: 300, maximum: 420), spacing: 20)]
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                DeviceStatusView()
+        VStack(spacing: 0) {
+            TransportBarView()
 
-                Divider()
+            Divider()
 
-                HStack(alignment: .top, spacing: 24) {
-                    FaderControlView()
-                    LaunchpadControlView()
-                }
-
-                Divider()
-
-                AudioControlView()
-
-                Divider()
-
-                HStack {
-                    MasterSyncToggle()
-                    Spacer()
-                    Button {
-                        appState.resetAll()
-                    } label: {
-                        Label("Reset Everything to Defaults", systemImage: "arrow.counterclockwise")
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    LazyVGrid(columns: cardColumns, alignment: .leading, spacing: 20) {
+                        FaderControlView()
+                        LaunchpadControlView()
+                        SurfaceControlView()
                     }
+
+                    DeviceStatusView()
+
+                    DiagnosticsView()
                 }
-
-                Divider()
-
-                DiagnosticsView()
+                .padding(20)
             }
-            .padding(20)
         }
-        .frame(minWidth: 760, minHeight: 640)
+        .frame(minWidth: 900, minHeight: 820)
     }
 }
 

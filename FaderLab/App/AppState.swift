@@ -3,8 +3,9 @@ import Observation
 import FaderLabCore
 
 /// Composition root: owns `MIDIManager`, `AudioEngine`, and `PatternEngine`, wires them
-/// together, and drives the ~30Hz animation tick that turns pattern output into MIDI
-/// traffic. SwiftUI views bind directly to this object's published state.
+/// together, and drives the 60Hz animation tick (faders every tick, pads/surface every
+/// other tick) that turns pattern output into MIDI traffic. SwiftUI views bind directly to
+/// this object's published state.
 @Observable
 final class AppState {
     let midiManager = MIDIManager()
@@ -23,6 +24,10 @@ final class AppState {
     static let defaultPadHueShift = 0.0
     static let defaultPadBrightness = 1.0
 
+    static let defaultSurfacePatternID = ZoneBeatFlashSurfacePattern.id
+    static let defaultSurfaceSpeed = 1.0
+    static let defaultSurfaceIntensity = 1.0
+
     static let defaultSyncToBeat = true
 
     var faderPatternID: String = AppState.defaultFaderPatternID {
@@ -40,6 +45,12 @@ final class AppState {
     var padHueShift = AppState.defaultPadHueShift { didSet { patternEngine.padParams.hueShift = padHueShift } }
     var padBrightness = AppState.defaultPadBrightness { didSet { patternEngine.padParams.brightness = padBrightness } }
 
+    var surfacePatternID: String = AppState.defaultSurfacePatternID {
+        didSet { applySurfacePattern() }
+    }
+    var surfaceSpeed = AppState.defaultSurfaceSpeed { didSet { patternEngine.surfaceParams.speed = surfaceSpeed } }
+    var surfaceIntensity = AppState.defaultSurfaceIntensity { didSet { patternEngine.surfaceParams.intensity = surfaceIntensity } }
+
     var syncToBeat = AppState.defaultSyncToBeat { didSet { patternEngine.syncToBeat = syncToBeat } }
 
     private(set) var midiStartError: String?
@@ -49,11 +60,20 @@ final class AppState {
     /// patterns on screen even without the X-Touch/Launchpad physically connected.
     private(set) var latestFaderValues = [Double](repeating: 0.5, count: XTouchProtocol.faderCount)
     private(set) var latestPadGrid = PixelGrid.allBlack
+    private(set) var latestSurfaceFrame = SurfaceFrame.allOff
 
-    private var startHostTime: TimeInterval = 0
+    /// Whether the show is currently paused. Paused freezes the hardware exactly where it
+    /// is (patterns simply stop being ticked) while the 60Hz timer itself keeps running, so
+    /// audio time, hand-moved-fader mirroring, and diagnostics all stay live.
+    private(set) var isPatternPaused = false
+
+    private var transportClock = TransportClock(startedAt: 0)
     private var tickTimer: DispatchSourceTimer?
+    private var tickCount = 0
 
-    private static let tickInterval: TimeInterval = 1.0 / 30.0
+    /// 60Hz overall so faders (ticked every call) update smoothly; pads and the X-Touch
+    /// surface only need every other tick (~30Hz) — see `tick()`.
+    private static let tickInterval: TimeInterval = 1.0 / 60.0
 
     init() {
         wireCallbacks()
@@ -71,7 +91,8 @@ final class AppState {
             midiStartError = "MIDI setup failed: \(error)"
         }
 
-        startHostTime = audioEngine.currentHostTimeSeconds()
+        transportClock = TransportClock(startedAt: audioEngine.currentHostTimeSeconds())
+        isPatternPaused = false
         startTickTimer()
     }
 
@@ -91,6 +112,18 @@ final class AppState {
         }
     }
 
+    /// Pauses or resumes the whole show. Resuming never causes a time jump: `TransportClock`
+    /// accumulates run time rather than anchoring to a start instant.
+    func togglePatternPause() {
+        let now = audioEngine.currentHostTimeSeconds()
+        if isPatternPaused {
+            transportClock.resume(at: now)
+        } else {
+            transportClock.pause(at: now)
+        }
+        isPatternPaused.toggle()
+    }
+
     // MARK: - Reset to defaults
 
     func resetFaderSettings() {
@@ -107,9 +140,16 @@ final class AppState {
         padBrightness = AppState.defaultPadBrightness
     }
 
+    func resetSurfaceSettings() {
+        surfacePatternID = AppState.defaultSurfacePatternID
+        surfaceSpeed = AppState.defaultSurfaceSpeed
+        surfaceIntensity = AppState.defaultSurfaceIntensity
+    }
+
     func resetAll() {
         resetFaderSettings()
         resetPadSettings()
+        resetSurfaceSettings()
         syncToBeat = AppState.defaultSyncToBeat
     }
 
@@ -147,6 +187,10 @@ final class AppState {
             self?.latestPadGrid = grid
             self?.sendPadFrame(grid)
         }
+        patternEngine.onSurfaceFrame = { [weak self] frame in
+            self?.latestSurfaceFrame = frame
+            self?.sendSurfaceFrame(frame)
+        }
     }
 
     private func applyFaderPattern() {
@@ -157,6 +201,11 @@ final class AppState {
     private func applyPadPattern() {
         guard let pattern = PadPatterns.all.first(where: { type(of: $0).id == padPatternID }) else { return }
         patternEngine.padPattern = pattern
+    }
+
+    private func applySurfacePattern() {
+        guard let pattern = SurfacePatterns.all.first(where: { type(of: $0).id == surfacePatternID }) else { return }
+        patternEngine.surfacePattern = pattern
     }
 
     // MARK: - Tick loop
@@ -176,11 +225,22 @@ final class AppState {
 
     private func tick() {
         let now = audioEngine.currentHostTimeSeconds()
-        let elapsed = now - startHostTime
+        let elapsed = transportClock.elapsed(at: now)
         let beat = audioEngine.beatClock.snapshot(now: now)
 
+        // Faders every tick (60Hz) for smooth motor motion; pads + surface every other
+        // tick (~30Hz) — Launchpad SysEx and the X-Touch surface don't need faster than
+        // that, and running them at 60Hz would double MIDI traffic for no visible gain.
+        var components: TickComponents = .faders
+        if tickCount.isMultiple(of: 2) {
+            components.formUnion([.pads, .surface])
+        }
+        tickCount += 1
+
         patternEngine.padParams.audioLevel = audioEngine.currentAudioLevel
-        patternEngine.tick(elapsed: elapsed, beat: beat)
+        if !isPatternPaused {
+            patternEngine.tick(elapsed: elapsed, beat: beat, components: components)
+        }
 
         audioEngine.refreshElapsedTime()
     }
@@ -195,5 +255,9 @@ final class AppState {
         // clear/re-enter-Programmer-mode commands), so it's the only place that can
         // actually know whether a frame matches what's on the hardware.
         midiManager.sendLaunchpadFrame(grid)
+    }
+
+    private func sendSurfaceFrame(_ frame: SurfaceFrame) {
+        midiManager.sendXTouchSurfaceFrame(frame)
     }
 }
