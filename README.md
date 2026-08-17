@@ -123,7 +123,8 @@ as a live audio-level meter, green->yellow->red).
 - **App Sandbox is off.** This is a personal tool, not intended for Mac App Store
   distribution, so sandboxing was skipped to avoid any CoreMIDI/USB entitlement edge
   cases rather than because it was verified to be necessary.
-- This app has never been built or run against real hardware in the environment that
-  wrote it (a sandbox with no Xcode/Swift toolchain at all) — the CoreMIDI/AVFoundation
-  glue and SwiftUI views should be treated as "compiles-in-principle following standard
-  patterns" until you've actually built and run it once on your Mac.
+- This app was written in a sandbox with no Xcode/Swift toolchain at all, so it couldn't
+  be built there directly — but GitHub Actions' macOS runners now build it on every push
+  (see "Try it" above), which confirmed the app compiles cleanly. What still hasn't been
+  verified is anything that needs the *physical* X-Touch/Launchpad plugged in (motor feel,
+  actual color/latency on the Launchpad) — that only you can check.
