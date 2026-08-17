@@ -276,11 +276,16 @@ final class MIDIManager {
         var packet = MIDIPacketListInit(packetList)
 
         for message in messages {
-            guard let next = MIDIPacketListAdd(packetList, bufferSize, packet, 0, message.count, message) else {
+            // MIDIPacketListAdd returns NULL if the message doesn't fit, but the SDK
+            // declares the return type as non-optional, so check that the packet count
+            // actually advanced instead of nil-testing the pointer. The buffer is sized
+            // from the real message lengths above, so this should never trip.
+            let countBefore = packetList.pointee.numPackets
+            packet = MIDIPacketListAdd(packetList, bufferSize, packet, 0, message.count, message)
+            guard packetList.pointee.numPackets > countBefore else {
                 reportError("MIDI buffer overflow while packing \(messages.count) messages")
                 return
             }
-            packet = next
         }
 
         let status = MIDISend(outputPort, destination, packetList)
