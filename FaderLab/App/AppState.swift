@@ -66,6 +66,8 @@ final class AppState {
         do {
             try midiManager.start()
             midiStartError = nil
+        } catch let error as MIDIManagerError {
+            midiStartError = error.description
         } catch {
             midiStartError = "MIDI setup failed: \(error)"
         }
@@ -124,6 +126,13 @@ final class AppState {
             }
         }
 
+        // Mirror hand-moved faders into the on-screen preview. Doubles as a live proof that
+        // input from the surface is reaching the app at all.
+        midiManager.onXTouchFaderPositionReport = { [weak self] index, unitValue in
+            guard let self, self.latestFaderValues.indices.contains(index) else { return }
+            self.latestFaderValues[index] = unitValue
+        }
+
         patternEngine.onFaderFrame = { [weak self] values in
             guard let self else { return }
             // NaN means "no automation this tick" (touched/manual-off) — keep showing the
@@ -178,9 +187,7 @@ final class AppState {
     }
 
     private func sendFaderFrame(_ values: [Double]) {
-        for (index, value) in values.enumerated() where !value.isNaN {
-            midiManager.sendXTouchFaderPosition(fader: index, value14: XTouchProtocol.value14(fromUnit: value))
-        }
+        midiManager.sendXTouchFaderFrame(values)
     }
 
     private func sendPadFrame(_ grid: PixelGrid) {

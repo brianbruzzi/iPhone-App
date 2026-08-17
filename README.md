@@ -12,26 +12,52 @@ installed, and you do **not** need the X-Touch or Launchpad plugged in to try it
 app shows an on-screen preview of exactly what the fader positions and Launchpad colors
 would be, right in the window.
 
-**One link, always the newest version:**
-**[Download FaderLab.zip](../../releases/download/latest-build/FaderLab.zip)**
-— bookmark this. It gets replaced with the latest build automatically, so re-downloading
-from the same link always gets you the newest version (no need to go find the latest
-Actions run each time).
+### Install (recommended — no Gatekeeper popup)
 
-1. Click the link above to download `FaderLab.zip`.
-2. Unzip it (double-click the `.zip` in Finder) — you'll get `FaderLab.app`.
-3. **First time only:** don't just double-click it. Right-click (or Control-click)
-   `FaderLab.app` and choose **Open**, then click **Open** again in the dialog that pops
-   up. This is a one-time step macOS requires for apps not downloaded from the App Store —
-   after this, it opens normally. (You'll need to do this "first time" step again each
-   time you download a fresh copy, since macOS treats each download as new.)
-4. Try the app: pick a fader pattern and a pixel-art pattern from the dropdowns, drag the
-   sliders, and load a song to watch the beat detection kick in — watch the bars and the
-   little colored grid animate live in the window.
+Open **Terminal** (press `Cmd+Space`, type "Terminal", hit Enter), paste this line, and
+press Enter:
 
-If that link 404s, the very first build hasn't finished yet — check the
-**[Actions tab](../../actions/workflows/build.yml)** for a green checkmark, then try the
-link again.
+```bash
+curl -fsSL https://raw.githubusercontent.com/brianbruzzi/iPhone-App/claude/faders-launchpad-midi-automation-u4z9u7/install.sh | bash
+```
+
+That downloads the newest build, installs it to `~/Applications`, and opens it. **Run the
+same line any time you want to update** — or just double-click the
+`Update FaderLab.command` file it drops next to the app, and skip Terminal entirely.
+
+**Why Terminal instead of just downloading the zip?** macOS tags files downloaded *by a
+browser* with a "quarantine" flag, and it's that flag — not the app — that triggers the
+"unidentified developer" block and sends you to System Settings. `curl` doesn't set the
+flag, so Gatekeeper never gets involved in the first place. (Note: the old
+"right-click → Open" trick you may have read about **no longer works** — Apple removed it
+in macOS 15 Sequoia.)
+
+*Security tradeoff, stated plainly:* this skips Apple's signature check **for this one
+app**, substituting "Apple vouched for this binary" with "I trust my own repo and my own
+CI." Nothing else on your Mac is affected. Do not do this for software you didn't build
+yourself.
+
+### Manual download (if you'd rather not use Terminal)
+
+**[Download FaderLab.zip](../../releases/download/latest-build/FaderLab.zip)** — this link
+always points at the newest build. After unzipping, macOS will block it; you'll need to
+either run this in Terminal once per download:
+
+```bash
+xattr -dr com.apple.quarantine ~/Downloads/FaderLab.app
+```
+
+...or go to **System Settings → Privacy & Security**, scroll down, and click **Open
+Anyway**. The installer script above exists specifically to avoid this dance.
+
+### Then
+
+Pick a fader pattern and a pixel-art pattern from the dropdowns, drag the sliders, and load
+a song to watch the beat detection kick in — the bars and the little colored grid animate
+live in the window, hardware or not.
+
+If the download link 404s, the build hasn't finished yet — check the
+**[Actions tab](../../actions/workflows/build.yml)** for a green checkmark and try again.
 
 ## Hardware
 
@@ -42,14 +68,33 @@ link again.
 
 ## One-time hardware setup
 
-### X-Touch: switch it into MC (Mackie Control) mode
+### X-Touch: switch it into MC (Mackie Control) mode — REQUIRED
 
-The X-Touch must be in **MC mode** for the fader-automation protocol in this app to work.
-This is a physical setting on the unit itself — the app cannot do this for you. Consult
-your X-Touch's Owner's Manual "Setup"/"MIDI" section to confirm the exact key combination
-for your firmware revision (it varies across hardware/firmware revisions), typically
-reached by holding a Function/channel-select key while powering on to reach a mode-select
-screen, then choosing "MC".
+**The X-Touch ships in HUI mode, not MC mode.** In HUI mode it ignores the messages this
+app sends entirely, so faders won't move and nothing lights up — even though the app will
+happily report the device as connected. This is the single most common reason FaderLab
+appears to do nothing.
+
+This is a physical setting on the unit; the app cannot change it for you:
+
+1. Power the X-Touch **off**.
+2. Hold down the **channel 1 SELECT** button.
+3. Keeping it held, switch the rear **power on**, and keep holding for ~2 seconds.
+4. The scribble strips (the little displays above the faders) become a settings menu.
+   - Turn **encoder 1** until it reads **`MC`**
+   - Turn **encoder 2** until it reads **`USB`**
+5. Press **channel 1 SELECT** again to save and boot into MC mode.
+
+Two easy mistakes:
+- If **encoder 2** is set to `MIDI` or `Network` instead of `USB`, nothing reaches the app
+  over USB no matter what mode you picked.
+- Instructions telling you to "hold the **MC** button while powering on" are for the
+  *X-Touch Compact / Mini*. The full-size X-Touch has no MC button — use the procedure
+  above.
+
+You can confirm the mode worked from inside FaderLab: open the **Diagnostics** panel, touch
+a fader with your hand, and check the detected mode. It'll tell you outright whether the
+surface is talking MC, Ctrl, or HUI.
 
 ### Launchpad X: two USB MIDI ports — use the right one
 

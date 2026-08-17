@@ -30,6 +30,10 @@ struct ContentView: View {
                         Label("Reset Everything to Defaults", systemImage: "arrow.counterclockwise")
                     }
                 }
+
+                Divider()
+
+                DiagnosticsView()
             }
             .padding(20)
         }

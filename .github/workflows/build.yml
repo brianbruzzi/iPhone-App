@@ -38,6 +38,16 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             build
 
+      # Not a Gatekeeper bypass — an ad-hoc signature is not a Developer ID one.
+      # But Apple Silicon requires *some* valid signature to execute, and building
+      # with CODE_SIGNING_ALLOWED=NO leaves the bundle unsealed (no
+      # _CodeSignature/CodeResources), a known source of "app is damaged" and
+      # Killed: 9 failures. Sealing it ad-hoc removes that whole class of problem.
+      - name: Ad-hoc sign the app bundle
+        run: |
+          codesign --force --deep --sign - build/Build/Products/Release/FaderLab.app
+          codesign --verify --verbose build/Build/Products/Release/FaderLab.app
+
       - name: Zip the built app
         run: |
           cd build/Build/Products/Release
