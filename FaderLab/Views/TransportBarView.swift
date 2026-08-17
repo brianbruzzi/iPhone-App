@@ -7,6 +7,7 @@ struct TransportBarView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
+        @Bindable var appState = appState
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 16) {
                 Button {
@@ -36,6 +37,15 @@ struct TransportBarView: View {
                     Label("Reset Everything", systemImage: "arrow.counterclockwise")
                 }
             }
+
+            Divider()
+
+            LabeledSlider(
+                label: "X-Touch Speed (Faders + Light Show)",
+                value: $appState.xTouchSpeed,
+                range: 0.1...4,
+                defaultValue: AppState.defaultXTouchSpeed
+            )
 
             Divider()
 

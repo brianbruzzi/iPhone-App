@@ -28,6 +28,8 @@ final class AppState {
     static let defaultSurfaceSpeed = 1.0
     static let defaultSurfaceIntensity = 1.0
 
+    static let defaultXTouchSpeed = 1.0
+
     static let defaultSyncToBeat = true
 
     var faderPatternID: String = AppState.defaultFaderPatternID {
@@ -50,6 +52,18 @@ final class AppState {
     }
     var surfaceSpeed = AppState.defaultSurfaceSpeed { didSet { patternEngine.surfaceParams.speed = surfaceSpeed } }
     var surfaceIntensity = AppState.defaultSurfaceIntensity { didSet { patternEngine.surfaceParams.intensity = surfaceIntensity } }
+
+    /// A master control over the X-Touch as a whole: moving it sets both `faderSpeed` and
+    /// `surfaceSpeed` to match. It's a fire-and-forget broadcast, not a live binding — the
+    /// two individual sliders stay independently adjustable afterward, and this value goes
+    /// stale (doesn't track them) until the master is moved again. Launchpad/`padSpeed` is
+    /// untouched; it's a separate physical device.
+    var xTouchSpeed = AppState.defaultXTouchSpeed {
+        didSet {
+            faderSpeed = xTouchSpeed
+            surfaceSpeed = xTouchSpeed
+        }
+    }
 
     var syncToBeat = AppState.defaultSyncToBeat { didSet { patternEngine.syncToBeat = syncToBeat } }
 
@@ -150,6 +164,7 @@ final class AppState {
         resetFaderSettings()
         resetPadSettings()
         resetSurfaceSettings()
+        xTouchSpeed = AppState.defaultXTouchSpeed
         syncToBeat = AppState.defaultSyncToBeat
     }
 

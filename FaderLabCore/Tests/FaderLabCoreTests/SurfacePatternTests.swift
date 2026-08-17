@@ -138,4 +138,64 @@ final class SurfacePatternTests: XCTestCase {
         XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.select.notes[1]], .off)
         XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.mute.notes[0]], .off)
     }
+
+    func testFaderMirrorLightsGlobalViewAboveHalf() {
+        let faders: [Double] = [0.6, 0.4] + Array(repeating: 0.5, count: 7)
+        let frame = FaderMirrorSurfacePattern().render(
+            elapsed: 0, beat: .idle, params: SurfacePatternParams(), faders: faders
+        )
+
+        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.globalView.notes[0]], .solid)
+        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.globalView.notes[1]], .off)
+    }
+
+    // MARK: - Round 4 zone expansion: indexing safety
+
+    /// `ButtonChaseSurfacePattern` and `FaderMirrorSurfacePattern` index into zones by
+    /// column/strip (0..<8). Some Round 4 zones have fewer than 8 notes (e.g. `.assign`
+    /// and `.cursor`, 6 each), so they must be modulo-wrapped rather than raw-indexed —
+    /// this sweeps every column/strip and every zone-selecting beatIndex to confirm
+    /// nothing traps, regardless of a zone's actual note count.
+    func testChaseAndFaderMirrorNeverTrapAcrossAllColumnsAndStrips() {
+        let params = SurfacePatternParams()
+        let chase = ButtonChaseSurfacePattern()
+        let mirror = FaderMirrorSurfacePattern()
+
+        for column in 0..<8 {
+            let liveBeat = BeatClockSnapshot(bpm: 120, phase: 0, beatIndex: column, isLive: true)
+            let chaseFrame = chase.render(elapsed: 0, beat: liveBeat, params: params, faders: nineFaders)
+            XCTAssertEqual(chaseFrame.buttons.count, XTouchSurfaceProtocol.animatableButtonNotes.count)
+
+            let mirrorFrame = mirror.render(elapsed: 0, beat: .idle, params: params, faders: nineFaders)
+            XCTAssertEqual(mirrorFrame.buttons.count, XTouchSurfaceProtocol.animatableButtonNotes.count)
+        }
+
+        for step in 0..<20 {
+            let elapsed = Double(step) * 0.5
+            _ = chase.render(elapsed: elapsed, beat: .idle, params: params, faders: nineFaders)
+        }
+    }
+
+    func testChaseLightsGlobalViewAndModuloWrappedZonesAtColumn() {
+        let beat = BeatClockSnapshot(bpm: 120, phase: 0, beatIndex: 2, isLive: true)
+        let frame = ButtonChaseSurfacePattern().render(elapsed: 0, beat: beat, params: SurfacePatternParams(), faders: nineFaders)
+
+        // globalView has exactly 8 notes -> direct index at column 2.
+        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.globalView.notes[2]], .solid)
+
+        // assign/cursor have fewer than 8 notes -> modulo-wrapped index at column 2.
+        let assignNotes = XTouchSurfaceProtocol.ButtonZone.assign.notes
+        XCTAssertEqual(frame[buttonNote: assignNotes[2 % assignNotes.count]], .solid)
+        let cursorNotes = XTouchSurfaceProtocol.ButtonZone.cursor.notes
+        XCTAssertEqual(frame[buttonNote: cursorNotes[2 % cursorNotes.count]], .solid)
+    }
+
+    func testBeatFlashRotatesThroughEightZonesIncludingNewOnes() {
+        let params = SurfacePatternParams()
+        let onGlobalViewBeat = BeatClockSnapshot(bpm: 120, phase: 0, beatIndex: 6, isLive: true) // index 6 -> .globalView
+        let frame = ZoneBeatFlashSurfacePattern().render(elapsed: 0, beat: onGlobalViewBeat, params: params, faders: nineFaders)
+
+        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.globalView.notes[0]], .solid)
+        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.rec.notes[0]], .off)
+    }
 }

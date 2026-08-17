@@ -13,8 +13,8 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     LazyVGrid(columns: cardColumns, alignment: .leading, spacing: 20) {
                         FaderControlView()
-                        LaunchpadControlView()
                         SurfaceControlView()
+                        LaunchpadControlView()
                     }
 
                     DeviceStatusView()

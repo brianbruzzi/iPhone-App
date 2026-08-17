@@ -31,6 +31,18 @@ public enum XTouchSurfaceProtocol {
 
     /// Groups of button notes worth animating. Not the full MC button map — just the
     /// zones with an obvious visual role on the physical surface.
+    ///
+    /// The 9 cases from `assign` through `userSwitch` cover the X-Touch's right-hand
+    /// control section (assign row, bank/channel nav, view toggles, the Global View row,
+    /// modifier keys, automation modes, utility buttons, and the cursor cluster) — sourced
+    /// from the standard Mackie Control Universal note map, cross-checked against two
+    /// independent references rather than Behringer's own chart (which wasn't reachable).
+    /// `miscToggles` in particular is lower-confidence on whether all 4 notes are real
+    /// backlit buttons on this specific unit. None of this carries hardware risk either
+    /// way: these are plain Note On messages, and a note the surface doesn't implement is
+    /// simply ignored — a fundamentally different (harmless) situation from the forbidden
+    /// SysEx command below. The jog wheel deliberately has no case here: it's an
+    /// input-only relative-encoder CC with no controllable LED.
     public enum ButtonZone: CaseIterable, Sendable {
         case rec
         case solo
@@ -39,6 +51,15 @@ public enum XTouchSurfaceProtocol {
         case vpotPress
         case function
         case transport
+        case assign
+        case bankNav
+        case miscToggles
+        case globalView
+        case modifier
+        case automation
+        case utility
+        case cursor
+        case userSwitch
 
         public var notes: [UInt8] {
             switch self {
@@ -49,11 +70,20 @@ public enum XTouchSurfaceProtocol {
             case .vpotPress: return Array(32...39)
             case .function: return Array(54...61)
             case .transport: return Array(91...95)
+            case .assign: return Array(40...45)
+            case .bankNav: return Array(46...49)
+            case .miscToggles: return Array(50...53)
+            case .globalView: return Array(62...69)
+            case .modifier: return Array(70...73)
+            case .automation: return Array(74...79)
+            case .utility: return Array(80...90)
+            case .cursor: return Array(96...101)
+            case .userSwitch: return Array(102...103)
             }
         }
     }
 
-    /// Every animatable button note, ascending, across all zones (53 notes). This is the
+    /// Every animatable button note, ascending, across all zones (104 notes). This is the
     /// canonical order `SurfaceFrame.buttons` is indexed by.
     public static let animatableButtonNotes: [UInt8] = ButtonZone.allCases.flatMap { $0.notes }.sorted()
 

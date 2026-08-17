@@ -35,7 +35,9 @@ public struct ZoneBeatFlashSurfacePattern: SurfacePattern {
 
     public init() {}
 
-    private static let zones: [XTouchSurfaceProtocol.ButtonZone] = [.rec, .solo, .mute, .select]
+    private static let zones: [XTouchSurfaceProtocol.ButtonZone] = [
+        .rec, .solo, .mute, .select, .assign, .automation, .globalView, .cursor
+    ]
     private static let playButtonNote: UInt8 = XTouchSurfaceProtocol.ButtonZone.transport.notes[3]
     private static let brandingTexts: [ScribbleText] = [
         ScribbleText(upper: "FADER", lower: "LAB"),
@@ -79,7 +81,12 @@ public struct ButtonChaseSurfacePattern: SurfacePattern {
 
     public init() {}
 
-    private static let columnZones: [XTouchSurfaceProtocol.ButtonZone] = [.rec, .solo, .mute, .select, .vpotPress]
+    // Direct `zone.notes[column]` indexing below requires each zone to have at least
+    // `stripCount` (8) notes — every zone here does. Zones with fewer notes (e.g.
+    // `.transport`, `.assign`, `.cursor`) use modulo-wrapped indexing instead, below.
+    private static let columnZones: [XTouchSurfaceProtocol.ButtonZone] = [
+        .rec, .solo, .mute, .select, .vpotPress, .globalView
+    ]
 
     public func render(elapsed: TimeInterval, beat: BeatClockSnapshot, params: SurfacePatternParams, faders: [Double]) -> SurfaceFrame {
         var frame = SurfaceFrame.allOff
@@ -102,6 +109,12 @@ public struct ButtonChaseSurfacePattern: SurfacePattern {
 
         let transportNotes = XTouchSurfaceProtocol.ButtonZone.transport.notes
         frame[buttonNote: transportNotes[column % transportNotes.count]] = .solid
+
+        let assignNotes = XTouchSurfaceProtocol.ButtonZone.assign.notes
+        frame[buttonNote: assignNotes[column % assignNotes.count]] = .solid
+
+        let cursorNotes = XTouchSurfaceProtocol.ButtonZone.cursor.notes
+        frame[buttonNote: cursorNotes[column % cursorNotes.count]] = .solid
 
         let sweepPhase = (elapsed * speed * 3).truncatingRemainder(dividingBy: 1)
         let sweepPosition = Int(sweepPhase * 11)
@@ -131,6 +144,7 @@ public struct FaderMirrorSurfacePattern: SurfacePattern {
         var frame = SurfaceFrame.allOff
         let selectNotes = XTouchSurfaceProtocol.ButtonZone.select.notes
         let muteNotes = XTouchSurfaceProtocol.ButtonZone.mute.notes
+        let globalViewNotes = XTouchSurfaceProtocol.ButtonZone.globalView.notes
 
         for strip in 0..<XTouchSurfaceProtocol.stripCount {
             let level = strip < faders.count ? min(max(faders[strip], 0), 1) : 0
@@ -142,6 +156,7 @@ public struct FaderMirrorSurfacePattern: SurfacePattern {
 
             frame[buttonNote: selectNotes[strip]] = level > 0.85 ? .solid : .off
             frame[buttonNote: muteNotes[strip]] = level < 0.15 ? .solid : .off
+            frame[buttonNote: globalViewNotes[strip]] = level > 0.5 ? .solid : .off
 
             frame.scribbleTexts[strip] = ScribbleText(upper: "CH \(strip + 1)", lower: "")
         }

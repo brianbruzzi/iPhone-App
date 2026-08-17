@@ -19,11 +19,20 @@ final class XTouchSurfaceProtocolTests: XCTestCase {
         XCTAssertEqual(XTouchSurfaceProtocol.ButtonZone.vpotPress.notes, Array(32...39))
         XCTAssertEqual(XTouchSurfaceProtocol.ButtonZone.function.notes, Array(54...61))
         XCTAssertEqual(XTouchSurfaceProtocol.ButtonZone.transport.notes, Array(91...95))
+        XCTAssertEqual(XTouchSurfaceProtocol.ButtonZone.assign.notes, Array(40...45))
+        XCTAssertEqual(XTouchSurfaceProtocol.ButtonZone.bankNav.notes, Array(46...49))
+        XCTAssertEqual(XTouchSurfaceProtocol.ButtonZone.miscToggles.notes, Array(50...53))
+        XCTAssertEqual(XTouchSurfaceProtocol.ButtonZone.globalView.notes, Array(62...69))
+        XCTAssertEqual(XTouchSurfaceProtocol.ButtonZone.modifier.notes, Array(70...73))
+        XCTAssertEqual(XTouchSurfaceProtocol.ButtonZone.automation.notes, Array(74...79))
+        XCTAssertEqual(XTouchSurfaceProtocol.ButtonZone.utility.notes, Array(80...90))
+        XCTAssertEqual(XTouchSurfaceProtocol.ButtonZone.cursor.notes, Array(96...101))
+        XCTAssertEqual(XTouchSurfaceProtocol.ButtonZone.userSwitch.notes, Array(102...103))
     }
 
     func testAnimatableButtonNotesIsSortedUniqueUnionOfZones() {
         let notes = XTouchSurfaceProtocol.animatableButtonNotes
-        XCTAssertEqual(notes.count, 53)
+        XCTAssertEqual(notes.count, 104)
         XCTAssertEqual(notes, notes.sorted())
         XCTAssertEqual(Set(notes).count, notes.count, "must be unique — zones must not overlap")
     }
@@ -35,8 +44,9 @@ final class XTouchSurfaceProtocolTests: XCTestCase {
     }
 
     func testButtonIndexReturnsNilForUnanimatedNote() {
-        // Note 40 falls in the gap between vpotPress (32-39) and function (54-61).
-        XCTAssertNil(XTouchSurfaceProtocol.buttonIndex(forNote: 40))
+        // Every note 0-103 is now covered by some zone (the 9 new zones added in Round 4
+        // closed what used to be gaps), so the first genuinely unassigned note is 104.
+        XCTAssertNil(XTouchSurfaceProtocol.buttonIndex(forNote: 104))
         XCTAssertNil(XTouchSurfaceProtocol.buttonIndex(forNote: 255))
     }
 
