@@ -24,7 +24,7 @@ final class AppState {
     static let defaultPadHueShift = 0.0
     static let defaultPadBrightness = 1.0
 
-    static let defaultSurfacePatternID = ZoneBeatFlashSurfacePattern.id
+    static let defaultSurfacePatternID = FullSurfaceSurfacePattern.id
     static let defaultSurfaceSpeed = 1.0
     static let defaultSurfaceIntensity = 1.0
 

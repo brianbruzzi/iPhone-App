@@ -129,8 +129,14 @@ struct DiagnosticsView: View {
                     .disabled(!midi.xTouchPortsFound)
                 Button("Encoder ring sweep test") { midi.sendXTouchTestRingSweep() }
                     .disabled(!midi.xTouchPortsFound)
+                Button("Light every button") { midi.sendXTouchLightAllButtons() }
+                    .disabled(!midi.xTouchPortsFound)
             }
             Text("If the scribble strips don't change color, the unit's firmware is likely older than 1.22 — everything else still works.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("\"Light every button\" turns every LED on at once — the definitive test for whether a button is actually wired up, versus just not driven by the current pattern.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

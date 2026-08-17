@@ -1,4 +1,5 @@
 import CoreMIDI
+import Foundation
 import Observation
 import FaderLabCore
 
@@ -99,8 +100,31 @@ final class MIDIManager {
 
     /// Mirrors `lastSentPadGrid`'s role for the X-Touch's buttons/rings/scribble strips:
     /// the one record of what's actually lit, shared by the pattern path and every
-    /// diagnostics action that bypasses it.
+    /// diagnostics action that bypasses it. Only ever set after every chunk of a send has
+    /// actually gone out (see `sendXTouchSurfaceFrame`) — trusting it after a partial send
+    /// would mean the dropped LEDs are diffed out and never re-sent.
     private var lastSentSurfaceFrame: SurfaceFrame?
+
+    /// When the surface cache was last force-refreshed via a full repaint. CoreMIDI
+    /// reporting `MIDISend` as successful only means the bytes were handed to the driver,
+    /// not that the USB-MIDI surface actually received/rendered them — a silent drop like
+    /// that wouldn't be caught by tracking send success alone, so a full repaint is forced
+    /// periodically regardless of the diff, as cheap self-healing insurance.
+    private var lastSurfaceResyncAt: Date?
+    private static let surfaceResyncInterval: TimeInterval = 5
+    /// Chunk size for outgoing surface-diff sends. Smaller than the 32 used elsewhere in
+    /// this file: a full surface repaint is ~130 messages, and 4 packets of ~30 sent
+    /// back-to-back at the same zero timestamp is exactly the traffic shape a USB-MIDI
+    /// surface can drop — smaller bursts are gentler on the link.
+    private static let surfaceChunkSize = 16
+
+    private var keepAliveTimer: DispatchSourceTimer?
+    private static let keepAliveInterval: TimeInterval = 6
+    /// The standard MCU Device Query (`F0 00 00 66 14 00 F7`) — a read-only, harmless
+    /// message (the dangerous one is command `0x04`, which this never goes near). The
+    /// X-Touch is documented to expect to hear from its host at least every 7-8 seconds or
+    /// it reports "MIDI: No Link", so this is sent on a timer while a destination exists.
+    private static let keepAliveMessage: [UInt8] = [0xF0, 0x00, 0x00, 0x66, 0x14, 0x00, 0xF7]
 
     enum SurfaceModeSetting: String, CaseIterable, Identifiable {
         case auto
@@ -164,11 +188,15 @@ final class MIDIManager {
 
         isStarted = true
         discoverDevices()
+        startKeepAliveTimer()
     }
 
     /// Leaves the Launchpad in a clean state and tears down CoreMIDI. Best effort — SwiftUI
     /// doesn't guarantee this runs on every quit path.
     func stop() {
+        keepAliveTimer?.cancel()
+        keepAliveTimer = nil
+
         if launchpadDestination != nil {
             send(LaunchpadXProtocol.clearAllMessage(), to: launchpadDestination)
             send(LaunchpadXProtocol.programmerModeMessage(enabled: false), to: launchpadDestination)
@@ -194,6 +222,7 @@ final class MIDIManager {
         lastSentPadGrid = nil
         faderFrameGate.invalidateAll()
         lastSentSurfaceFrame = nil
+        lastSurfaceResyncAt = nil
         isStarted = false
     }
 
@@ -307,19 +336,58 @@ final class MIDIManager {
             return
         }
 
-        let messages = XTouchSurfaceDiff.messages(from: lastSentSurfaceFrame, to: frame)
-        guard !messages.isEmpty else { return }
-        lastSentSurfaceFrame = frame
+        let now = Date()
+        let needsResync = lastSurfaceResyncAt.map { now.timeIntervalSince($0) >= Self.surfaceResyncInterval } ?? true
+        let baseline = needsResync ? nil : lastSentSurfaceFrame
+
+        let messages = XTouchSurfaceDiff.messages(from: baseline, to: frame)
+        guard !messages.isEmpty else {
+            if needsResync { lastSurfaceResyncAt = now }
+            return
+        }
 
         if let first = messages.first {
             monitor.recordOutgoing(first)
         }
-        // Chunked like sendXTouchResetSurface: a full repaint is ~78 messages, well past
-        // what comfortably fits in one packet list.
-        for chunk in stride(from: 0, to: messages.count, by: 32) {
-            let slice = Array(messages[chunk..<min(chunk + 32, messages.count)])
+
+        var allChunksSucceeded = true
+        for chunk in stride(from: 0, to: messages.count, by: Self.surfaceChunkSize) {
+            let slice = Array(messages[chunk..<min(chunk + Self.surfaceChunkSize, messages.count)])
+            if !sendBatch(slice, to: destination) {
+                allChunksSucceeded = false
+            }
+        }
+
+        // Only trust the cache once every chunk genuinely made it out — otherwise the next
+        // diff would silently skip re-sending whatever was in a dropped chunk, and those
+        // LEDs would stay wrong until something else (a test button, a mode change) forces
+        // a repaint.
+        if allChunksSucceeded {
+            lastSentSurfaceFrame = frame
+            if needsResync { lastSurfaceResyncAt = now }
+        } else {
+            lastSentSurfaceFrame = nil
+        }
+    }
+
+    /// Sets every animatable button LED solid at once — the definitive "is this button
+    /// actually wired up" test. Added after a round where several genuinely-working zones
+    /// (assign row, automation, cursor cluster) were mistaken for broken ones because the
+    /// active pattern simply wasn't driving them yet, not because anything was wrong with
+    /// the hardware or the note map.
+    func sendXTouchLightAllButtons() {
+        guard let destination = xTouchDestination else { return }
+        let messages = XTouchSurfaceProtocol.animatableButtonNotes.map {
+            XTouchSurfaceProtocol.buttonLEDBytes(note: $0, state: .solid)
+        }
+        if let first = messages.first {
+            monitor.recordOutgoing(first, force: true)
+        }
+        for chunk in stride(from: 0, to: messages.count, by: Self.surfaceChunkSize) {
+            let slice = Array(messages[chunk..<min(chunk + Self.surfaceChunkSize, messages.count)])
             sendBatch(slice, to: destination)
         }
+        lastSentSurfaceFrame = nil
     }
 
     func sendLaunchpadFrame(_ grid: PixelGrid) {
@@ -350,22 +418,42 @@ final class MIDIManager {
         lastError = nil
     }
 
+    // MARK: - Keep-alive
+
+    private func startKeepAliveTimer() {
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + Self.keepAliveInterval, repeating: Self.keepAliveInterval)
+        timer.setEventHandler { [weak self] in self?.sendKeepAlive() }
+        timer.resume()
+        keepAliveTimer = timer
+    }
+
+    private func sendKeepAlive() {
+        guard let destination = xTouchDestination else { return }
+        monitor.recordOutgoing(Self.keepAliveMessage, force: true)
+        send(Self.keepAliveMessage, to: destination)
+    }
+
     // MARK: - Raw send
 
-    private func send(_ bytes: [UInt8], to destination: MIDIEndpointRef?) {
-        guard let destination else { return }
-        sendBatch([bytes], to: destination)
+    @discardableResult
+    private func send(_ bytes: [UInt8], to destination: MIDIEndpointRef?) -> Bool {
+        guard let destination else { return false }
+        return sendBatch([bytes], to: destination)
     }
 
     /// Packs several short messages into one `MIDIPacketList` and sends it once, so a frame
     /// of several changed values (up to 9 faders, or a burst of surface diff messages)
-    /// costs one `MIDISend` instead of one per message.
+    /// costs one `MIDISend` instead of one per message. Returns whether the send actually
+    /// succeeded — callers that cache "what's on the hardware now" (like
+    /// `sendXTouchSurfaceFrame`) need to know this before trusting that cache.
     ///
     /// If batching fails for any reason, this falls back to sending each message on its
     /// own rather than dropping the frame — a bad batch should degrade performance, never
     /// silence the output.
-    private func sendBatch(_ messages: [[UInt8]], to destination: MIDIEndpointRef) {
-        guard outputPort != 0, !messages.isEmpty else { return }
+    @discardableResult
+    private func sendBatch(_ messages: [[UInt8]], to destination: MIDIEndpointRef) -> Bool {
+        guard outputPort != 0, !messages.isEmpty else { return false }
 
         // Worst case is every message landing in its own packet: 8-byte timestamp +
         // 2-byte length + payload, rounded up for alignment, plus the list header.
@@ -399,18 +487,22 @@ final class MIDIManager {
         }
 
         guard packedAll else {
-            sendIndividually(messages, to: destination)
-            return
+            return sendIndividually(messages, to: destination)
         }
 
         let status = MIDISend(outputPort, destination, packetList)
         if status != noErr {
             reportError("MIDISend failed with error \(status)")
+            return false
         }
+        return true
     }
 
-    /// One `MIDISend` per message. Slower, but immune to any packing problem.
-    private func sendIndividually(_ messages: [[UInt8]], to destination: MIDIEndpointRef) {
+    /// One `MIDISend` per message. Slower, but immune to any packing problem. Returns
+    /// whether every message in the batch made it out.
+    @discardableResult
+    private func sendIndividually(_ messages: [[UInt8]], to destination: MIDIEndpointRef) -> Bool {
+        var allSucceeded = true
         for message in messages {
             let bufferSize = max(512, message.count + 64)
             let raw = UnsafeMutableRawPointer.allocate(
@@ -424,14 +516,17 @@ final class MIDIManager {
             let next = MIDIPacketListAdd(packetList, bufferSize, packet, 0, message.count, message)
             guard UInt(bitPattern: UnsafeRawPointer(next)) != 0 else {
                 reportError("Couldn't pack a \(message.count)-byte MIDI message")
+                allSucceeded = false
                 continue
             }
 
             let status = MIDISend(outputPort, destination, packetList)
             if status != noErr {
                 reportError("MIDISend failed with error \(status)")
+                allSucceeded = false
             }
         }
+        return allSucceeded
     }
 
     private func reportError(_ message: String) {

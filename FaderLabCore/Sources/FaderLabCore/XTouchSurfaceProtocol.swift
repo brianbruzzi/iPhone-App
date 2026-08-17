@@ -23,8 +23,8 @@ public enum XTouchSurfaceProtocol {
 
     private static let noteOnStatusChannel1: UInt8 = 0x90
 
-    /// Encodes a button-LED message. `note` is 0...103 per the MC button map (see
-    /// `ButtonZone` for the specific ranges this app animates).
+    /// Encodes a button-LED message. `note` is 0...103, or one of the LED-only indicator
+    /// notes 113...115 (see `ButtonZone` for the specific ranges this app animates).
     public static func buttonLEDBytes(note: UInt8, state: ButtonLEDState) -> [UInt8] {
         [noteOnStatusChannel1, note, state.rawValue]
     }
@@ -33,16 +33,20 @@ public enum XTouchSurfaceProtocol {
     /// zones with an obvious visual role on the physical surface.
     ///
     /// The 9 cases from `assign` through `userSwitch` cover the X-Touch's right-hand
-    /// control section (assign row, bank/channel nav, view toggles, the Global View row,
-    /// modifier keys, automation modes, utility buttons, and the cursor cluster) — sourced
-    /// from the standard Mackie Control Universal note map, cross-checked against two
-    /// independent references rather than Behringer's own chart (which wasn't reachable).
-    /// `miscToggles` in particular is lower-confidence on whether all 4 notes are real
-    /// backlit buttons on this specific unit. None of this carries hardware risk either
-    /// way: these are plain Note On messages, and a note the surface doesn't implement is
-    /// simply ignored — a fundamentally different (harmless) situation from the forbidden
-    /// SysEx command below. The jog wheel deliberately has no case here: it's an
-    /// input-only relative-encoder CC with no controllable LED.
+    /// control section (assign row, bank/channel nav, the Flip/Global-View toggles, the
+    /// Global View row, modifier keys, automation modes, utility buttons, and the cursor
+    /// cluster). Note numbers are confirmed against a reverse-engineered per-button X-Touch
+    /// table (cross-checked against 3 independent MCU implementations and Ardour's own
+    /// surface driver) — every button on the surface has a working LED except two
+    /// (`.miscToggles` deliberately excludes them, see below). None of this carries
+    /// hardware risk either way: these are plain Note On messages, and a note the surface
+    /// doesn't implement is simply ignored — a fundamentally different (harmless) situation
+    /// from the forbidden SysEx command below. The jog wheel deliberately has no case here:
+    /// it's an input-only relative-encoder CC with no controllable LED.
+    ///
+    /// The assign row's note-to-label pairing (in case it's ever surfaced in the UI) is
+    /// 40=TRACK, 41=SEND, 42=PAN/SURROUND, 43=PLUG-IN, 44=EQ, 45=INST — note order, not the
+    /// panel's left-to-right silkscreen order.
     public enum ButtonZone: CaseIterable, Sendable {
         case rec
         case solo
@@ -60,6 +64,7 @@ public enum XTouchSurfaceProtocol {
         case utility
         case cursor
         case userSwitch
+        case indicator
 
         public var notes: [UInt8] {
             switch self {
@@ -72,18 +77,27 @@ public enum XTouchSurfaceProtocol {
             case .transport: return Array(91...95)
             case .assign: return Array(40...45)
             case .bankNav: return Array(46...49)
-            case .miscToggles: return Array(50...53)
+            // Flip (50) and Global View toggle (51) only — 52 (Name/Value) and 53
+            // (SMPTE/Beats) are confirmed to have no LED behind them at all, so lighting
+            // them is wasted traffic that would also make a "light everything" test look
+            // like it found a dead button when nothing is actually wrong.
+            case .miscToggles: return Array(50...51)
             case .globalView: return Array(62...69)
             case .modifier: return Array(70...73)
             case .automation: return Array(74...79)
             case .utility: return Array(80...90)
             case .cursor: return Array(96...101)
             case .userSwitch: return Array(102...103)
+            // LEDs with no button behind them (SMPTE LED, Beats LED, rude-Solo LED) —
+            // free extra lights next to the timecode display. Not to be confused with
+            // 104...112, which are the fader touch-sense notes, not LEDs.
+            case .indicator: return Array(113...115)
             }
         }
     }
 
-    /// Every animatable button note, ascending, across all zones (104 notes). This is the
+    /// Every animatable button note, ascending, across all zones (105 notes — not
+    /// contiguous, since notes 52/53 and 104...112 are deliberately excluded). This is the
     /// canonical order `SurfaceFrame.buttons` is indexed by.
     public static let animatableButtonNotes: [UInt8] = ButtonZone.allCases.flatMap { $0.notes }.sorted()
 

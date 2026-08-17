@@ -55,7 +55,7 @@ public final class PatternEngine {
     public init(
         faderPattern: any FaderPattern = WaveFaderPattern(),
         padPattern: any PadPattern = PlasmaWavePattern(),
-        surfacePattern: any SurfacePattern = ZoneBeatFlashSurfacePattern()
+        surfacePattern: any SurfacePattern = FullSurfaceSurfacePattern()
     ) {
         self.faderPattern = faderPattern
         self.padPattern = padPattern

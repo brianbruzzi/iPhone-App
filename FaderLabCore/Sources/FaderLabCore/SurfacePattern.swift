@@ -15,6 +15,13 @@ public struct SurfacePatternParams: Equatable, Sendable {
 /// Renders a full X-Touch surface lighting frame (button LEDs, encoder rings, scribble
 /// strips) on every animation tick. Pure function of elapsed time + the shared beat clock
 /// — no MIDI/hardware dependency, so every pattern is deterministically testable.
+///
+/// Design rule for every pattern below except `Off`: **a dark button is the exception, not
+/// the default.** The X-Touch has ~105 individually-lightable LEDs; a pattern that only
+/// ever lights one small zone at a time reads as "mostly broken" even when every button is
+/// working correctly (this is exactly what prompted the Round 5 rewrite — see git history).
+/// `.blink` is used as an "alive but not accented" baseline and `.solid` as the accent, so
+/// the whole surface is doing something at all times rather than sitting mostly dark.
 public protocol SurfacePattern {
     static var id: String { get }
     static var displayName: String { get }
@@ -26,18 +33,16 @@ public protocol SurfacePattern {
     func render(elapsed: TimeInterval, beat: BeatClockSnapshot, params: SurfacePatternParams, faders: [Double]) -> SurfaceFrame
 }
 
-/// One button-row zone lights solid at each beat onset and cuts off partway through the
-/// beat (cycling REC -> SOLO -> MUTE -> SELECT), Play blinks in time, the encoder rings
-/// pulse outward from center, and the scribble strips step through a color per bar.
+/// The whole surface blazes solid on the downbeat; as the beat advances past `intensity`,
+/// zones progressively drop to a blink baseline (never fully dark) in a rotating order, so
+/// which section "lets go" first changes every beat. The encoder rings pulse outward from
+/// center, and the scribble strips step through a color per bar.
 public struct ZoneBeatFlashSurfacePattern: SurfacePattern {
     public static let id = "beatFlash"
     public static let displayName = "Beat Flash"
 
     public init() {}
 
-    private static let zones: [XTouchSurfaceProtocol.ButtonZone] = [
-        .rec, .solo, .mute, .select, .assign, .automation, .globalView, .cursor
-    ]
     private static let playButtonNote: UInt8 = XTouchSurfaceProtocol.ButtonZone.transport.notes[3]
     private static let brandingTexts: [ScribbleText] = [
         ScribbleText(upper: "FADER", lower: "LAB"),
@@ -53,12 +58,28 @@ public struct ZoneBeatFlashSurfacePattern: SurfacePattern {
     public func render(elapsed: TimeInterval, beat: BeatClockSnapshot, params: SurfacePatternParams, faders: [Double]) -> SurfaceFrame {
         var frame = SurfaceFrame.allOff
 
-        let zoneCount = Self.zones.count
-        let zoneIndex = ((beat.beatIndex % zoneCount) + zoneCount) % zoneCount
-        let lit = beat.phase <= max(0.01, params.intensity)
-        frame.fill(Self.zones[zoneIndex], with: lit ? .solid : .off)
+        let allZones = XTouchSurfaceProtocol.ButtonZone.allCases
+        let zoneCount = allZones.count
+        for zone in allZones {
+            frame.fill(zone, with: .solid)
+        }
+
+        // `intensity` is how much of the beat stays fully lit before sections start
+        // peeling off; higher intensity = the blaze holds longer. Peeled sections go to
+        // `.blink`, never `.off` — the surface stays visibly alive through the whole beat.
+        let cutoff = max(0.05, min(0.95, params.intensity))
+        if beat.phase > cutoff {
+            let dropProgress = min(1, (beat.phase - cutoff) / max(0.01, 1 - cutoff))
+            let zonesToDrop = Int(dropProgress * Double(zoneCount))
+            let rotation = ((beat.beatIndex % zoneCount) + zoneCount) % zoneCount
+            for i in 0..<zonesToDrop {
+                frame.fill(allZones[(i + rotation) % zoneCount], with: .blink)
+            }
+        }
+
         frame[buttonNote: Self.playButtonNote] = .blink
 
+        let lit = beat.phase <= cutoff
         let ringPosition = Int(((1 - beat.phase) * 11).rounded())
         let ringDisplay = XTouchSurfaceProtocol.RingDisplay(mode: .spread, position: ringPosition, centerLED: lit)
         frame.rings = Array(repeating: ringDisplay, count: XTouchSurfaceProtocol.stripCount)
@@ -73,20 +94,15 @@ public struct ZoneBeatFlashSurfacePattern: SurfacePattern {
     }
 }
 
-/// A lit column sweeps across all 8 strips' buttons in lockstep, F-keys and the encoder
-/// rings chase along with it, and the scribble strips cycle a moving rainbow.
+/// Every zone blinks as a baseline, and a lit column sweeps across all of them in lockstep
+/// (one accented note per zone, modulo-wrapped so it works regardless of a zone's actual
+/// note count — the same safe wrap the 5-note `.transport` zone always needed). The
+/// encoder rings and scribble strips chase along with it.
 public struct ButtonChaseSurfacePattern: SurfacePattern {
     public static let id = "chase"
     public static let displayName = "Chase"
 
     public init() {}
-
-    // Direct `zone.notes[column]` indexing below requires each zone to have at least
-    // `stripCount` (8) notes — every zone here does. Zones with fewer notes (e.g.
-    // `.transport`, `.assign`, `.cursor`) use modulo-wrapped indexing instead, below.
-    private static let columnZones: [XTouchSurfaceProtocol.ButtonZone] = [
-        .rec, .solo, .mute, .select, .vpotPress, .globalView
-    ]
 
     public func render(elapsed: TimeInterval, beat: BeatClockSnapshot, params: SurfacePatternParams, faders: [Double]) -> SurfaceFrame {
         var frame = SurfaceFrame.allOff
@@ -100,21 +116,12 @@ public struct ButtonChaseSurfacePattern: SurfacePattern {
             column = Int(elapsed * speed * 2) % stripCount
         }
 
-        for zone in Self.columnZones {
-            frame[buttonNote: zone.notes[column]] = .solid
+        for zone in XTouchSurfaceProtocol.ButtonZone.allCases {
+            let notes = zone.notes
+            guard !notes.isEmpty else { continue }
+            frame.fill(zone, with: .blink)
+            frame[buttonNote: notes[column % notes.count]] = .solid
         }
-
-        let functionNotes = XTouchSurfaceProtocol.ButtonZone.function.notes
-        frame[buttonNote: functionNotes[column]] = .solid
-
-        let transportNotes = XTouchSurfaceProtocol.ButtonZone.transport.notes
-        frame[buttonNote: transportNotes[column % transportNotes.count]] = .solid
-
-        let assignNotes = XTouchSurfaceProtocol.ButtonZone.assign.notes
-        frame[buttonNote: assignNotes[column % assignNotes.count]] = .solid
-
-        let cursorNotes = XTouchSurfaceProtocol.ButtonZone.cursor.notes
-        frame[buttonNote: cursorNotes[column % cursorNotes.count]] = .solid
 
         let sweepPhase = (elapsed * speed * 3).truncatingRemainder(dividingBy: 1)
         let sweepPosition = Int(sweepPhase * 11)
@@ -132,19 +139,31 @@ public struct ButtonChaseSurfacePattern: SurfacePattern {
     }
 }
 
-/// Each encoder ring and scribble strip mirrors its corresponding fader's live position —
-/// SELECT lights when a fader is nearly full up, MUTE when it's nearly all the way down.
+/// Every zone on the surface reflects the live fader levels, like a bank of VU meters.
+/// The 8-note channel-strip zones (REC, SOLO, V-Pot press, Function, Global View) form a
+/// graduated "ladder" — a strip's fader lights progressively more rungs as it rises — while
+/// SELECT/MUTE keep their original at-the-extremes meaning (bright at nearly-full/nearly-
+/// empty). Zones that don't map 1:1 to a channel strip become simple meter bars scaled to
+/// the average level across all faders. Nothing not currently accented goes fully dark —
+/// it drops to `.blink` — so the whole surface still reads as "alive."
 public struct FaderMirrorSurfacePattern: SurfacePattern {
     public static let id = "faderMirror"
     public static let displayName = "Fader Mirror"
 
     public init() {}
 
+    private static let ladderZones: [(zone: XTouchSurfaceProtocol.ButtonZone, threshold: Double)] = [
+        (.rec, 0.2), (.solo, 0.35), (.vpotPress, 0.5), (.function, 0.65), (.globalView, 0.8)
+    ]
+
+    private static let meterZones: [XTouchSurfaceProtocol.ButtonZone] = [
+        .assign, .bankNav, .miscToggles, .modifier, .automation, .utility, .cursor, .userSwitch, .transport, .indicator
+    ]
+
     public func render(elapsed: TimeInterval, beat: BeatClockSnapshot, params: SurfacePatternParams, faders: [Double]) -> SurfaceFrame {
         var frame = SurfaceFrame.allOff
         let selectNotes = XTouchSurfaceProtocol.ButtonZone.select.notes
         let muteNotes = XTouchSurfaceProtocol.ButtonZone.mute.notes
-        let globalViewNotes = XTouchSurfaceProtocol.ButtonZone.globalView.notes
 
         for strip in 0..<XTouchSurfaceProtocol.stripCount {
             let level = strip < faders.count ? min(max(faders[strip], 0), 1) : 0
@@ -154,12 +173,64 @@ public struct FaderMirrorSurfacePattern: SurfacePattern {
             let colorRaw: UInt8 = level < 1.0 / 3.0 ? 2 : (level < 2.0 / 3.0 ? 3 : 1) // green, yellow, red
             frame.scribbleColors[strip] = XTouchSurfaceProtocol.ScribbleColor(rawValue: colorRaw) ?? .white
 
-            frame[buttonNote: selectNotes[strip]] = level > 0.85 ? .solid : .off
-            frame[buttonNote: muteNotes[strip]] = level < 0.15 ? .solid : .off
-            frame[buttonNote: globalViewNotes[strip]] = level > 0.5 ? .solid : .off
+            frame[buttonNote: selectNotes[strip]] = level > 0.85 ? .solid : .blink
+            frame[buttonNote: muteNotes[strip]] = level < 0.15 ? .solid : .blink
+
+            for rung in Self.ladderZones {
+                let notes = rung.zone.notes
+                frame[buttonNote: notes[strip]] = level > rung.threshold ? .solid : .blink
+            }
 
             frame.scribbleTexts[strip] = ScribbleText(upper: "CH \(strip + 1)", lower: "")
         }
+
+        let averageLevel: Double = faders.isEmpty ? 0 : min(max(faders.reduce(0, +) / Double(faders.count), 0), 1)
+        for zone in Self.meterZones {
+            let notes = zone.notes
+            let litCount = Int((averageLevel * Double(notes.count)).rounded())
+            for (index, note) in notes.enumerated() {
+                frame[buttonNote: note] = index < litCount ? .solid : .blink
+            }
+        }
+
+        return frame
+    }
+}
+
+/// Maximum density: the entire surface lights solid, with a slow rolling blink band
+/// traveling across it for a sense of motion even at full brightness. The go-to "everything
+/// is on" look — also doubles as a visual proof that every LED actually responds, since
+/// there's nowhere for a dead button to hide.
+public struct FullSurfaceSurfacePattern: SurfacePattern {
+    public static let id = "fullSurface"
+    public static let displayName = "Full Surface"
+
+    public init() {}
+
+    public func render(elapsed: TimeInterval, beat: BeatClockSnapshot, params: SurfacePatternParams, faders: [Double]) -> SurfaceFrame {
+        var frame = SurfaceFrame.allOff
+        let allNotes = XTouchSurfaceProtocol.animatableButtonNotes
+        for note in allNotes {
+            frame[buttonNote: note] = .solid
+        }
+
+        let speed = max(params.speed, 0.01)
+        let bandWidth = max(1, Int(Double(allNotes.count) * 0.12))
+        let position = Int(elapsed * speed * 8) % allNotes.count
+        for offset in 0..<bandWidth {
+            let index = (position + offset) % allNotes.count
+            frame[buttonNote: allNotes[index]] = .blink
+        }
+
+        frame.rings = Array(
+            repeating: .init(mode: .spread, position: 11, centerLED: true),
+            count: XTouchSurfaceProtocol.stripCount
+        )
+        frame.scribbleColors = Array(repeating: .white, count: XTouchSurfaceProtocol.stripCount)
+        frame.scribbleTexts = Array(
+            repeating: ScribbleText(upper: "FADER", lower: "LAB"),
+            count: XTouchSurfaceProtocol.stripCount
+        )
 
         return frame
     }
@@ -180,6 +251,7 @@ public struct SurfaceOffPattern: SurfacePattern {
 /// Convenience registry of all built-in surface patterns, for UI pickers.
 public enum SurfacePatterns {
     public static let all: [any SurfacePattern] = [
+        FullSurfaceSurfacePattern(),
         ZoneBeatFlashSurfacePattern(),
         ButtonChaseSurfacePattern(),
         FaderMirrorSurfacePattern(),

@@ -5,8 +5,8 @@ final class XTouchSurfaceDiffTests: XCTestCase {
 
     func testNilOldProducesFullRepaint() {
         let messages = XTouchSurfaceDiff.messages(from: nil, to: .allOff)
-        // 104 buttons + 8 rings + 1 color message + 16 text cells (8 strips x 2 rows)
-        XCTAssertEqual(messages.count, 104 + 8 + 1 + 16)
+        // 105 buttons + 8 rings + 1 color message + 16 text cells (8 strips x 2 rows)
+        XCTAssertEqual(messages.count, 105 + 8 + 1 + 16)
     }
 
     func testFullRepaintOrderIsButtonsThenRingsThenColorsThenTexts() {
