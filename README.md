@@ -7,25 +7,31 @@ with each other and with music played from within the app.
 
 ## Try it — no Xcode, no hardware required
 
-Every push to this project automatically builds a ready-to-run copy of the app. You do
-**not** need Xcode installed, and you do **not** need the X-Touch or Launchpad plugged in
-to try it out — the app shows an on-screen preview of exactly what the fader positions and
-Launchpad colors would be, right in the window.
+Every push to this project automatically rebuilds the app. You do **not** need Xcode
+installed, and you do **not** need the X-Touch or Launchpad plugged in to try it out — the
+app shows an on-screen preview of exactly what the fader positions and Launchpad colors
+would be, right in the window.
 
-1. Go to the **[Actions tab](../../actions/workflows/build.yml)** of this repository.
-2. Click the most recent run with a green checkmark ✅.
-3. Scroll down to **Artifacts** and click **FaderLab-app** to download a `.zip` file.
-4. Unzip it (double-click the `.zip` in Finder) — you'll get `FaderLab.app`.
-5. **First time only:** don't just double-click it. Right-click (or Control-click)
+**One link, always the newest version:**
+**[Download FaderLab.zip](../../releases/download/latest-build/FaderLab.zip)**
+— bookmark this. It gets replaced with the latest build automatically, so re-downloading
+from the same link always gets you the newest version (no need to go find the latest
+Actions run each time).
+
+1. Click the link above to download `FaderLab.zip`.
+2. Unzip it (double-click the `.zip` in Finder) — you'll get `FaderLab.app`.
+3. **First time only:** don't just double-click it. Right-click (or Control-click)
    `FaderLab.app` and choose **Open**, then click **Open** again in the dialog that pops
    up. This is a one-time step macOS requires for apps not downloaded from the App Store —
-   after this, it opens normally.
-6. Try the app: pick a fader pattern and a pixel-art pattern from the dropdowns, drag the
+   after this, it opens normally. (You'll need to do this "first time" step again each
+   time you download a fresh copy, since macOS treats each download as new.)
+4. Try the app: pick a fader pattern and a pixel-art pattern from the dropdowns, drag the
    sliders, and load a song to watch the beat detection kick in — watch the bars and the
    little colored grid animate live in the window.
 
-If a run shows a red ❌ instead of a green checkmark, that means the automatic build hit a
-problem — no need to debug it yourself, just flag it and it'll get fixed.
+If that link 404s, the very first build hasn't finished yet — check the
+**[Actions tab](../../actions/workflows/build.yml)** for a green checkmark, then try the
+link again.
 
 ## Hardware
 
