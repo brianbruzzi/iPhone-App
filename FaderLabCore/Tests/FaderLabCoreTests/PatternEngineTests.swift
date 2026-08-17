@@ -84,4 +84,94 @@ final class PatternEngineTests: XCTestCase {
         XCTAssertEqual(faderCalls, 2)
         XCTAssertEqual(padCalls, 2)
     }
+
+    // MARK: - TickComponents
+
+    func testComponentsFilterWhichCallbacksFire() {
+        let engine = PatternEngine()
+        var faderCalls = 0
+        var padCalls = 0
+        var surfaceCalls = 0
+        engine.onFaderFrame = { _ in faderCalls += 1 }
+        engine.onPadFrame = { _ in padCalls += 1 }
+        engine.onSurfaceFrame = { _ in surfaceCalls += 1 }
+
+        engine.tick(elapsed: 0, beat: .idle, components: .faders)
+        XCTAssertEqual(faderCalls, 1)
+        XCTAssertEqual(padCalls, 0)
+        XCTAssertEqual(surfaceCalls, 0)
+
+        engine.tick(elapsed: 0, beat: .idle, components: [.pads, .surface])
+        XCTAssertEqual(faderCalls, 1)
+        XCTAssertEqual(padCalls, 1)
+        XCTAssertEqual(surfaceCalls, 1)
+    }
+
+    func testDefaultComponentsIsAll() {
+        let engine = PatternEngine()
+        var faderCalls = 0
+        var padCalls = 0
+        var surfaceCalls = 0
+        engine.onFaderFrame = { _ in faderCalls += 1 }
+        engine.onPadFrame = { _ in padCalls += 1 }
+        engine.onSurfaceFrame = { _ in surfaceCalls += 1 }
+
+        engine.tick(elapsed: 0, beat: .idle)
+
+        XCTAssertEqual(faderCalls, 1)
+        XCTAssertEqual(padCalls, 1)
+        XCTAssertEqual(surfaceCalls, 1)
+    }
+
+    // MARK: - lastKnownFaderValues
+
+    func testLastKnownFaderValuesStartsNeutral() {
+        let engine = PatternEngine()
+        XCTAssertEqual(engine.lastKnownFaderValues, Array(repeating: 0.5, count: XTouchProtocol.faderCount))
+    }
+
+    func testLastKnownFaderValuesUpdatesFromFiniteFrames() {
+        let engine = PatternEngine(faderPattern: ConstantFaderPattern(value: 0.75), padPattern: PlasmaWavePattern())
+        engine.tick(elapsed: 0, beat: .idle, components: .faders)
+
+        XCTAssertEqual(engine.lastKnownFaderValues, Array(repeating: 0.75, count: XTouchProtocol.faderCount))
+    }
+
+    func testLastKnownFaderValuesHoldsLastValueForTouchedFaders() {
+        let engine = PatternEngine(faderPattern: ConstantFaderPattern(value: 0.2), padPattern: PlasmaWavePattern())
+        engine.tick(elapsed: 0, beat: .idle, components: .faders)
+
+        engine.touchedFaders = [3]
+        engine.faderPattern = ConstantFaderPattern(value: 0.9)
+        engine.tick(elapsed: 1, beat: .idle, components: .faders)
+
+        // Fader 3 was touched (emits NaN this tick) -> keeps its pre-touch value, 0.2.
+        XCTAssertEqual(engine.lastKnownFaderValues[3], 0.2, accuracy: 1e-9)
+        // Untouched faders track the new pattern output.
+        XCTAssertEqual(engine.lastKnownFaderValues[0], 0.9, accuracy: 1e-9)
+    }
+
+    func testSurfacePatternReceivesLastKnownFaderValues() {
+        let engine = PatternEngine(faderPattern: ConstantFaderPattern(value: 0.3), padPattern: PlasmaWavePattern())
+        engine.tick(elapsed: 0, beat: .idle, components: .faders)
+
+        var receivedFaders: [Double] = []
+        engine.surfacePattern = RecordingSurfacePattern { faders in receivedFaders = faders }
+        engine.tick(elapsed: 0, beat: .idle, components: .surface)
+
+        XCTAssertEqual(receivedFaders, Array(repeating: 0.3, count: XTouchProtocol.faderCount))
+    }
+}
+
+/// Captures the `faders` array it was called with, for asserting `PatternEngine` wires
+/// `lastKnownFaderValues` through to surface patterns correctly.
+private struct RecordingSurfacePattern: SurfacePattern {
+    static let id = "recording"
+    static let displayName = "Recording"
+    let onRender: ([Double]) -> Void
+
+    func render(elapsed: TimeInterval, beat: BeatClockSnapshot, params: SurfacePatternParams, faders: [Double]) -> SurfaceFrame {
+        onRender(faders)
+        return .allOff
+    }
 }
