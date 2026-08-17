@@ -82,6 +82,14 @@ final class MIDIManager {
     private var launchpadDestinationIsManual = false
 
     private var connectedSources: Set<MIDIEndpointRef> = []
+    private var wasLaunchpadDestinationPresent = false
+
+    /// Dedupes outgoing Launchpad frames. Lives here rather than in the caller so every
+    /// path that touches the Launchpad (pattern frames, the diagnostics "all pads off" and
+    /// "re-enter Programmer mode" buttons) shares one true record of what's on the
+    /// hardware — a cache that only the pattern path updated could go stale the moment
+    /// anything else changed the pads out from under it.
+    private var lastSentPadGrid: PixelGrid?
 
     enum SurfaceModeSetting: String, CaseIterable, Identifiable {
         case auto
@@ -150,7 +158,7 @@ final class MIDIManager {
     /// Leaves the Launchpad in a clean state and tears down CoreMIDI. Best effort — SwiftUI
     /// doesn't guarantee this runs on every quit path.
     func stop() {
-        if launchpadPortsFound {
+        if launchpadDestination != nil {
             send(LaunchpadXProtocol.clearAllMessage(), to: launchpadDestination)
             send(LaunchpadXProtocol.programmerModeMessage(enabled: false), to: launchpadDestination)
         }
@@ -171,6 +179,8 @@ final class MIDIManager {
         connectedSources.removeAll()
         xTouchPortsFound = false
         launchpadPortsFound = false
+        wasLaunchpadDestinationPresent = false
+        lastSentPadGrid = nil
         isStarted = false
     }
 
@@ -243,18 +253,24 @@ final class MIDIManager {
     }
 
     func sendLaunchpadFrame(_ grid: PixelGrid) {
+        guard grid != lastSentPadGrid else { return }
+        lastSentPadGrid = grid
         let bytes = LaunchpadXProtocol.frameMessage(grid)
         monitor.recordOutgoing(bytes)
         send(bytes, to: launchpadDestination)
     }
 
     func sendLaunchpadProgrammerMode(_ enabled: Bool) {
+        // Entering/leaving Programmer mode can change what's actually lit without going
+        // through sendLaunchpadFrame, so the cache can no longer vouch for the hardware.
+        lastSentPadGrid = nil
         let bytes = LaunchpadXProtocol.programmerModeMessage(enabled: enabled)
         monitor.recordOutgoing(bytes, force: true)
         send(bytes, to: launchpadDestination)
     }
 
     func sendLaunchpadClearAll() {
+        lastSentPadGrid = .allBlack
         let bytes = LaunchpadXProtocol.clearAllMessage()
         monitor.recordOutgoing(bytes, force: true)
         send(bytes, to: launchpadDestination)
@@ -360,12 +376,30 @@ final class MIDIManager {
         // MIDIPacketNext on it walks off the end of a stack copy rather than through the
         // buffer, which is a genuine memory-safety bug for multi-packet lists.
         for packet in packetListPointer.unsafeSequence() {
-            let length = Int(packet.pointee.length)
+            // `packet.pointee.length` can legitimately exceed 256 (CoreMIDI docs: the
+            // 256-byte `data` field is a convenience size, not a hard cap), and it's driven
+            // by the MIDIServer rather than anything this app controls, so bound it before
+            // using it as a read length.
+            let length = min(Int(packet.pointee.length), 65_536)
             guard length > 0 else { continue }
-            let bytes: [UInt8] = withUnsafeBytes(of: packet.pointee.data) { raw in
-                Array(raw.prefix(length))
+
+            // `packet.pointee.data` is a fixed 256-byte tuple; evaluating it copies all 256
+            // bytes regardless of `length` — past the end of a short packet, and past the
+            // end of the list entirely for the final one. Read exactly `length` bytes from
+            // the packet's own storage instead. `?? 10` rather than `!`: this runs on
+            // CoreMIDI's realtime callback thread, where a trap is the worst possible
+            // failure mode, and 10 (8-byte timestamp + 2-byte length) is correct on every
+            // Apple platform even in the fallback case.
+            let dataOffset = MemoryLayout<MIDIPacket>.offset(of: \.data) ?? 10
+            let base = UnsafeRawPointer(packet).advanced(by: dataOffset)
+            let bytes = [UInt8](UnsafeRawBufferPointer(start: base, count: length))
+
+            // A single packet often bundles several simultaneous messages (e.g. two faders
+            // that moved at the same timestamp) — treating the whole packet as one message
+            // silently dropped everything after the first.
+            for message in MIDIMessageDecoder.splitMessages(bytes) {
+                handleIncomingMessage(message)
             }
-            handleIncomingMessage(bytes)
         }
     }
 
@@ -398,6 +432,9 @@ final class MIDIManager {
     func discoverDevices() {
         refreshEndpointLists()
 
+        let previousXTouchSource = xTouchSource
+        let previousLaunchpadSource = launchpadSource
+
         if !xTouchSourceIsManual {
             xTouchSource = availableSources.first(where: { MIDIManager.looksLikeXTouch($0.displayName) })?.endpointRef
         }
@@ -411,13 +448,13 @@ final class MIDIManager {
             launchpadDestination = availableDestinations.first(where: { MIDIManager.looksLikeLaunchpadMIDIPort($0.displayName) })?.endpointRef
         }
 
+        disconnectSourceIfOrphaned(previousXTouchSource)
+        disconnectSourceIfOrphaned(previousLaunchpadSource)
         connectSources()
         refreshStatus()
     }
 
     private func refreshStatus() {
-        let wasLaunchpadFound = launchpadPortsFound
-
         xTouchPortsFound = xTouchSource != nil && xTouchDestination != nil
         launchpadPortsFound = launchpadSource != nil && launchpadDestination != nil
 
@@ -426,9 +463,15 @@ final class MIDIManager {
         launchpadSourceName = launchpadSource.flatMap { name(matching: $0, in: availableSources) }
         launchpadDestinationName = launchpadDestination.flatMap { name(matching: $0, in: availableDestinations) }
 
-        if launchpadPortsFound, !wasLaunchpadFound {
+        // Gated on the *destination* specifically, not "both ports found": Programmer mode
+        // only needs somewhere to send the SysEx, and gating it on the input port too meant
+        // a Launchpad with a found destination but no matched source never got switched out
+        // of Live mode, so nothing it was sent would light correctly.
+        let isLaunchpadDestinationPresent = launchpadDestination != nil
+        if isLaunchpadDestinationPresent, !wasLaunchpadDestinationPresent {
             sendLaunchpadProgrammerMode(true)
         }
+        wasLaunchpadDestinationPresent = isLaunchpadDestinationPresent
     }
 
     private func name(matching endpoint: MIDIEndpointRef, in list: [MIDIEndpointInfo]) -> String? {
@@ -445,6 +488,17 @@ final class MIDIManager {
                 reportError("Couldn't listen to a MIDI input (error \(status))")
             }
         }
+    }
+
+    /// Disconnects `endpoint` if nothing currently uses it. Without this, switching which
+    /// port the X-Touch reads from (whether auto-discovery finding a better match, or the
+    /// user picking manually) left the *previous* endpoint connected too, so both kept
+    /// feeding touch/fader events into the same callbacks.
+    private func disconnectSourceIfOrphaned(_ endpoint: MIDIEndpointRef?) {
+        guard let endpoint, endpoint != xTouchSource, endpoint != launchpadSource else { return }
+        guard connectedSources.contains(endpoint) else { return }
+        MIDIPortDisconnectSource(inputPort, endpoint)
+        connectedSources.remove(endpoint)
     }
 
     /// The full-size X-Touch's CoreMIDI name isn't a documented constant, and reports vary
@@ -469,8 +523,10 @@ final class MIDIManager {
     // MARK: - Manual endpoint selection
 
     func useManualXTouchSource(_ endpoint: MIDIEndpointRef) {
+        let previous = xTouchSource
         xTouchSource = endpoint
         xTouchSourceIsManual = true
+        disconnectSourceIfOrphaned(previous)
         connectSources()
         refreshStatus()
     }
@@ -482,8 +538,10 @@ final class MIDIManager {
     }
 
     func useManualLaunchpadSource(_ endpoint: MIDIEndpointRef) {
+        let previous = launchpadSource
         launchpadSource = endpoint
         launchpadSourceIsManual = true
+        disconnectSourceIfOrphaned(previous)
         connectSources()
         refreshStatus()
     }

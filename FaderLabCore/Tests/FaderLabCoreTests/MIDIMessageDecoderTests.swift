@@ -116,4 +116,79 @@ final class MIDIMessageDecoderTests: XCTestCase {
         let text = MIDIMessageDecoder.describe([0xD0, 0x7C, 0x00])
         XCTAssertTrue(text.contains("VU strip 8"), text)
     }
+
+    // MARK: - splitMessages — the packet-coalescing bug this exists to fix
+
+    func testSplitsTwoCoalescedFaderMessages() {
+        // Exactly the real-world case that motivated this: two faders moved at the same
+        // timestamp, so CoreMIDI packs both pitch-bend messages into one packet.
+        let fader1 = XTouchProtocol.pitchBendBytes(fader: 0, value14: 8000)
+        let fader2 = XTouchProtocol.pitchBendBytes(fader: 1, value14: 12000)
+        let packetBytes = fader1 + fader2
+
+        let messages = MIDIMessageDecoder.splitMessages(packetBytes)
+
+        XCTAssertEqual(messages, [fader1, fader2])
+    }
+
+    func testSplitsNineCoalescedFaderMessages() {
+        let allNine = (0..<XTouchProtocol.faderCount).map {
+            XTouchProtocol.pitchBendBytes(fader: $0, value14: $0 * 1000)
+        }
+        let packetBytes = allNine.flatMap { $0 }
+
+        XCTAssertEqual(MIDIMessageDecoder.splitMessages(packetBytes), allNine)
+    }
+
+    func testSplitsMixedMessageLengths() {
+        let noteOn: [UInt8] = [0x90, 24, 127]        // 3 bytes
+        let programChange: [UInt8] = [0xC0, 5]        // 2 bytes
+        let pitchBend: [UInt8] = [0xE0, 0x00, 0x40]   // 3 bytes
+
+        let messages = MIDIMessageDecoder.splitMessages(noteOn + programChange + pitchBend)
+
+        XCTAssertEqual(messages, [noteOn, programChange, pitchBend])
+    }
+
+    func testSplitsSysExAmongOtherMessages() {
+        let before: [UInt8] = [0x90, 24, 127]
+        let sysEx = LaunchpadXProtocol.programmerModeMessage(enabled: true)
+        let after: [UInt8] = [0xE0, 0x00, 0x40]
+
+        let messages = MIDIMessageDecoder.splitMessages(before + sysEx + after)
+
+        XCTAssertEqual(messages, [before, sysEx, after])
+    }
+
+    func testSplitEmptyBytesReturnsNoMessages() {
+        XCTAssertEqual(MIDIMessageDecoder.splitMessages([]), [])
+    }
+
+    func testSplitSkipsLeadingStrayDataByte() {
+        // A byte below 0x80 with no preceding status shouldn't happen in a well-formed
+        // packet, but must not be misread as a status byte if it does.
+        let strayByte: UInt8 = 0x40
+        let noteOn: [UInt8] = [0x90, 24, 127]
+
+        XCTAssertEqual(MIDIMessageDecoder.splitMessages([strayByte] + noteOn), [noteOn])
+    }
+
+    func testSplitTruncatedTrailingMessageDoesNotOverread() {
+        // A 3-byte message with only 2 bytes actually present (e.g. a packet cut short)
+        // must clamp to what's there, not read past the end of the array.
+        let truncated: [UInt8] = [0x90, 24]
+        XCTAssertEqual(MIDIMessageDecoder.splitMessages(truncated), [truncated])
+    }
+
+    func testSplitSysExWithoutTerminatorConsumesToEnd() {
+        let untermindated: [UInt8] = [0xF0, 0x00, 0x20, 0x29]
+        XCTAssertEqual(MIDIMessageDecoder.splitMessages(untermindated), [untermindated])
+    }
+
+    func testSplitRealTimeBytesAreSingleByteMessages() {
+        // 0xF8 (clock) can legitimately appear interleaved with other traffic.
+        let clock: [UInt8] = [0xF8]
+        let noteOn: [UInt8] = [0x90, 24, 127]
+        XCTAssertEqual(MIDIMessageDecoder.splitMessages(clock + noteOn + clock), [clock, noteOn, clock])
+    }
 }

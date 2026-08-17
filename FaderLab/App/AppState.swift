@@ -52,7 +52,6 @@ final class AppState {
 
     private var startHostTime: TimeInterval = 0
     private var tickTimer: DispatchSourceTimer?
-    private var lastSentPadGrid: PixelGrid?
 
     private static let tickInterval: TimeInterval = 1.0 / 30.0
 
@@ -191,8 +190,10 @@ final class AppState {
     }
 
     private func sendPadFrame(_ grid: PixelGrid) {
-        guard grid != lastSentPadGrid else { return }
-        lastSentPadGrid = grid
+        // Deduping lives in MIDIManager now: it's the one place that sees every path that
+        // touches the Launchpad (pattern frames, and the diagnostics panel's direct
+        // clear/re-enter-Programmer-mode commands), so it's the only place that can
+        // actually know whether a frame matches what's on the hardware.
         midiManager.sendLaunchpadFrame(grid)
     }
 }

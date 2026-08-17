@@ -39,6 +39,46 @@ public enum MIDIMessageDecoder {
         bytes.map { String(format: "%02X", $0) }.joined(separator: " ")
     }
 
+    /// Splits one MIDI packet's raw bytes into individual messages by walking status
+    /// bytes. CoreMIDI can — and does, e.g. when several faders move at the same
+    /// timestamp — bundle multiple simultaneous messages into a single packet. CoreMIDI
+    /// packets never use running status, so each message starts with its own status byte,
+    /// making a straightforward walk sufficient. Any leading bytes below 0x80 (a stray
+    /// data byte with no preceding status, which shouldn't occur in a well-formed packet
+    /// but is not asserted against) are skipped rather than misread as a status byte.
+    public static func splitMessages(_ bytes: [UInt8]) -> [[UInt8]] {
+        var messages: [[UInt8]] = []
+        var index = 0
+        while index < bytes.count {
+            let status = bytes[index]
+            guard status >= 0x80 else { index += 1; continue }
+
+            if status == 0xF0 {
+                // SysEx: runs to 0xF7 (inclusive) or the end of the available bytes.
+                var end = index + 1
+                while end < bytes.count, bytes[end] != 0xF7 { end += 1 }
+                if end < bytes.count { end += 1 }
+                messages.append(Array(bytes[index..<end]))
+                index = end
+                continue
+            }
+
+            let length: Int
+            switch status {
+            case 0x80...0xBF, 0xE0...0xEF: length = 3   // note/CC/pitch-bend
+            case 0xC0...0xDF: length = 2                 // program change / channel pressure
+            case 0xF1, 0xF3: length = 2                  // MTC quarter frame / song select
+            case 0xF2: length = 3                        // song position pointer
+            default: length = 1                          // 0xF4-0xF7, 0xF8-0xFF: real-time/undefined
+            }
+
+            let end = min(index + length, bytes.count)
+            messages.append(Array(bytes[index..<end]))
+            index = end
+        }
+        return messages
+    }
+
     /// A plain-English description of a MIDI message, favouring X-Touch/Launchpad
     /// meanings over generic MIDI ones where they apply.
     public static func describe(_ bytes: [UInt8]) -> String {
