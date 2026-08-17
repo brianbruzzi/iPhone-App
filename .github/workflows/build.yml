@@ -62,9 +62,20 @@ jobs:
         run: |
           cd build/Build/Products/Release
           gh release delete latest-build --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
-          gh release create latest-build FaderLab.zip \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "FaderLab — latest build" \
-            --notes "Automatically rebuilt from the newest commit on \`${{ github.ref_name }}\`. This link always points at the newest version — just re-download from here, no need to hunt through Actions runs." \
-            --prerelease
+
+          # The GitHub API occasionally returns a transient 5xx here; retry a few times
+          # with backoff rather than failing the whole run over a momentary hiccup.
+          for attempt in 1 2 3 4 5; do
+            if gh release create latest-build FaderLab.zip \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "FaderLab — latest build" \
+              --notes "Automatically rebuilt from the newest commit on \`${{ github.ref_name }}\`. This link always points at the newest version — just re-download from here, no need to hunt through Actions runs." \
+              --prerelease; then
+              exit 0
+            fi
+            echo "Attempt $attempt failed, retrying in $((attempt * 10))s..."
+            sleep $((attempt * 10))
+          done
+          echo "::error::Failed to publish the latest-build release after 5 attempts"
+          exit 1
