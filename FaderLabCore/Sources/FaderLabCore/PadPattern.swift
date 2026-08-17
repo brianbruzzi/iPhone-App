@@ -157,12 +157,75 @@ public struct VUMeterColumnsPattern: PadPattern {
     }
 }
 
+/// Pads twinkle on and off at varying brightness, like starlight. Deterministic (combined
+/// sine waves per pad, not true randomness) so it's reproducible and testable.
+public struct SparklePattern: PadPattern {
+    public static let id = "sparkle"
+    public static let displayName = "Sparkle"
+
+    public init() {}
+
+    public func render(elapsed: TimeInterval, beat: BeatClockSnapshot, params: PadPatternParams) -> PixelGrid {
+        var grid = PixelGrid.allBlack
+        let speed = max(params.speed, 0.01)
+        for y in 0..<8 {
+            for x in 0..<8 {
+                let seed = Double(x) * 7.13 + Double(y) * 3.71
+                let phase = elapsed * speed * 2.2 + seed
+                let twinkle = (sin(phase) + sin(phase * 1.41 + seed)) / 2 // -1...1
+                // Only the upper part of the cycle lights up, giving sparse twinkling
+                // rather than every pad glowing all the time.
+                guard twinkle > 0.55 else { continue }
+                let intensity = (twinkle - 0.55) / 0.45
+                grid[x, y] = RGBColor(hue: params.hueShift, saturation: 0.15, value: params.brightness * intensity)
+            }
+        }
+        return grid
+    }
+}
+
+/// A ball bounces around the grid, DVD-screensaver style, leaving a soft glow.
+public struct BouncingBallPattern: PadPattern {
+    public static let id = "bouncingBall"
+    public static let displayName = "Bouncing Ball"
+
+    public init() {}
+
+    public func render(elapsed: TimeInterval, beat: BeatClockSnapshot, params: PadPatternParams) -> PixelGrid {
+        let speed = max(params.speed, 0.01)
+        let ballX = BouncingBallPattern.triangleWave(elapsed * speed * 0.9) * 7
+        let ballY = BouncingBallPattern.triangleWave(elapsed * speed * 1.3 + 0.37) * 7
+
+        var grid = PixelGrid.allBlack
+        for y in 0..<8 {
+            for x in 0..<8 {
+                let dx = Double(x) - ballX
+                let dy = Double(y) - ballY
+                let distance = sqrt(dx * dx + dy * dy)
+                let intensity = max(0, 1 - distance / 1.4)
+                guard intensity > 0 else { continue }
+                grid[x, y] = RGBColor(hue: params.hueShift, saturation: 1, value: params.brightness * intensity)
+            }
+        }
+        return grid
+    }
+
+    /// Triangle wave 0...1...0 with period 2 (in the same time units as `t`).
+    static func triangleWave(_ t: Double) -> Double {
+        let cyclePosition = t.truncatingRemainder(dividingBy: 2)
+        let normalized = cyclePosition < 0 ? cyclePosition + 2 : cyclePosition
+        return normalized <= 1 ? normalized : 2 - normalized
+    }
+}
+
 /// Convenience registry of all built-in pad patterns, for UI pickers.
 public enum PadPatterns {
     public static let all: [any PadPattern] = [
         PlasmaWavePattern(),
         RainbowChasePattern(),
         BeatRipplePattern(),
-        VUMeterColumnsPattern()
+        VUMeterColumnsPattern(),
+        SparklePattern(),
+        BouncingBallPattern()
     ]
 }

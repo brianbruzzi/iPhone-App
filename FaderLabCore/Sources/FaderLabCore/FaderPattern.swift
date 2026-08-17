@@ -87,6 +87,57 @@ public struct BeatChaseFaderPattern: FaderPattern {
     }
 }
 
+/// A single "comet" scans back and forth across the 9 faders, Knight-Rider style.
+public struct SweepFaderPattern: FaderPattern {
+    public static let id = "sweep"
+    public static let displayName = "Sweep"
+
+    public init() {}
+
+    public func faderValues(elapsed: TimeInterval, beat: BeatClockSnapshot, params: FaderPatternParams) -> [Double] {
+        let count = XTouchProtocol.faderCount
+        let speed = max(params.speed, 0.01)
+        let scanPosition = SweepFaderPattern.triangleWave(elapsed * speed * 0.5) * Double(count - 1)
+        let restLevel = params.baseLevel - params.amplitude * 0.5
+
+        return (0..<count).map { index in
+            let distance = abs(Double(index) - scanPosition)
+            let falloff = max(0, 1 - distance / 1.5)
+            let value = restLevel + params.amplitude * falloff
+            return min(max(value, 0), 1)
+        }
+    }
+
+    /// Triangle wave 0...1...0 with period 2 (in the same time units as `t`).
+    static func triangleWave(_ t: Double) -> Double {
+        let cyclePosition = t.truncatingRemainder(dividingBy: 2)
+        let normalized = cyclePosition < 0 ? cyclePosition + 2 : cyclePosition
+        return normalized <= 1 ? normalized : 2 - normalized
+    }
+}
+
+/// Each fader wanders independently in a chaotic-looking but fully deterministic way
+/// (combined sine waves at incommensurate frequencies per fader, not true randomness —
+/// same `elapsed` always produces the same output, which keeps this pattern testable).
+public struct RandomJitterFaderPattern: FaderPattern {
+    public static let id = "randomJitter"
+    public static let displayName = "Random Jitter"
+
+    public init() {}
+
+    public func faderValues(elapsed: TimeInterval, beat: BeatClockSnapshot, params: FaderPatternParams) -> [Double] {
+        let speed = max(params.speed, 0.01)
+        return (0..<XTouchProtocol.faderCount).map { index in
+            let seed = Double(index) * 12.9898
+            let angle1 = elapsed * speed * (1.3 + Double(index) * 0.37) + seed
+            let angle2 = elapsed * speed * (2.7 + Double(index) * 0.19) + seed * 1.7
+            let noise = (sin(angle1) + sin(angle2 * 1.618)) / 2 // -1...1, looks chaotic
+            let value = params.baseLevel + params.amplitude * 0.5 * noise
+            return min(max(value, 0), 1)
+        }
+    }
+}
+
 /// Sends nothing — releases all faders to manual/DAW control.
 public struct ManualOffFaderPattern: FaderPattern {
     public static let id = "manualOff"
@@ -105,6 +156,8 @@ public enum FaderPatterns {
         WaveFaderPattern(),
         BeatPulseFaderPattern(),
         BeatChaseFaderPattern(),
+        SweepFaderPattern(),
+        RandomJitterFaderPattern(),
         ManualOffFaderPattern()
     ]
 }

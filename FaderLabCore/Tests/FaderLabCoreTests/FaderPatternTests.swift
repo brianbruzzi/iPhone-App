@@ -75,6 +75,49 @@ final class FaderPatternTests: XCTestCase {
         XCTAssertEqual(BeatChaseFaderPattern().faderValues(elapsed: 0, beat: beatNine, params: params)[0], 1.0, accuracy: 1e-9)
     }
 
+    // MARK: - Sweep
+
+    func testSweepStaysWithinUnitRange() {
+        let params = FaderPatternParams(speed: 1, amplitude: 1, baseLevel: 0.5)
+        for t in stride(from: 0.0, to: 8.0, by: 0.37) {
+            let values = SweepFaderPattern().faderValues(elapsed: t, beat: .idle, params: params)
+            XCTAssertEqual(values.count, XTouchProtocol.faderCount)
+            for value in values {
+                XCTAssertGreaterThanOrEqual(value, 0)
+                XCTAssertLessThanOrEqual(value, 1)
+            }
+        }
+    }
+
+    func testSweepIsDeterministic() {
+        let params = FaderPatternParams()
+        let a = SweepFaderPattern().faderValues(elapsed: 1.23, beat: .idle, params: params)
+        let b = SweepFaderPattern().faderValues(elapsed: 1.23, beat: .idle, params: params)
+        XCTAssertEqual(a, b)
+    }
+
+    // MARK: - Random jitter
+
+    func testRandomJitterStaysWithinUnitRangeAndVariesPerFader() {
+        let params = FaderPatternParams(speed: 1, amplitude: 1, baseLevel: 0.5)
+        let values = RandomJitterFaderPattern().faderValues(elapsed: 2.5, beat: .idle, params: params)
+        XCTAssertEqual(values.count, XTouchProtocol.faderCount)
+        for value in values {
+            XCTAssertGreaterThanOrEqual(value, 0)
+            XCTAssertLessThanOrEqual(value, 1)
+        }
+        // Different faders should not all land on exactly the same value (it's meant to
+        // look like independent jitter, not unison motion).
+        XCTAssertGreaterThan(Set(values.map { ($0 * 1e6).rounded() }).count, 1)
+    }
+
+    func testRandomJitterIsDeterministic() {
+        let params = FaderPatternParams()
+        let a = RandomJitterFaderPattern().faderValues(elapsed: 4.0, beat: .idle, params: params)
+        let b = RandomJitterFaderPattern().faderValues(elapsed: 4.0, beat: .idle, params: params)
+        XCTAssertEqual(a, b)
+    }
+
     // MARK: - Manual off
 
     func testManualOffReturnsAllNaN() {
@@ -87,6 +130,6 @@ final class FaderPatternTests: XCTestCase {
 
     func testRegistryContainsAllBuiltInPatterns() {
         let ids = Set(FaderPatterns.all.map { type(of: $0).id })
-        XCTAssertEqual(ids, ["wave", "beatPulse", "beatChase", "manualOff"])
+        XCTAssertEqual(ids, ["wave", "beatPulse", "beatChase", "sweep", "randomJitter", "manualOff"])
     }
 }

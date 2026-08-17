@@ -11,6 +11,6 @@ struct FaderLabApp: App {
                 .onAppear { appState.start() }
                 .onDisappear { appState.stop() }
         }
-        .windowResizability(.contentSize)
+        .defaultSize(width: 900, height: 820)
     }
 }

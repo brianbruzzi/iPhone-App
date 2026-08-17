@@ -72,10 +72,54 @@ final class PadPatternTests: XCTestCase {
         XCTAssertGreaterThan(bottomLeft.g, bottomLeft.r, "low VU height should read as green-dominant, not red")
     }
 
+    // MARK: - Sparkle
+
+    func testSparkleZeroBrightnessIsAllBlack() {
+        let params = PadPatternParams(speed: 1, hueShift: 0, brightness: 0)
+        let grid = SparklePattern().render(elapsed: 1.7, beat: .idle, params: params)
+        XCTAssertEqual(grid, .allBlack)
+    }
+
+    func testSparkleIsDeterministicAndSparse() {
+        let params = PadPatternParams(speed: 1, hueShift: 0, brightness: 1)
+        let gridA = SparklePattern().render(elapsed: 5.0, beat: .idle, params: params)
+        let gridB = SparklePattern().render(elapsed: 5.0, beat: .idle, params: params)
+        XCTAssertEqual(gridA, gridB)
+
+        // "Sparse twinkling" means most pads should be off at any given instant, not the
+        // whole grid lit at once.
+        var litCount = 0
+        gridA.forEach { _, _, color in if color != .black { litCount += 1 } }
+        XCTAssertLessThan(litCount, 64)
+    }
+
+    // MARK: - Bouncing ball
+
+    func testBouncingBallZeroBrightnessIsAllBlack() {
+        let params = PadPatternParams(speed: 1, hueShift: 0, brightness: 0)
+        let grid = BouncingBallPattern().render(elapsed: 0.9, beat: .idle, params: params)
+        XCTAssertEqual(grid, .allBlack)
+    }
+
+    func testBouncingBallHasABrightSpotSomewhereOnTheGrid() {
+        let params = PadPatternParams(speed: 1, hueShift: 0, brightness: 1)
+        let grid = BouncingBallPattern().render(elapsed: 0, beat: .idle, params: params)
+        var sawLitPad = false
+        grid.forEach { _, _, color in if color != .black { sawLitPad = true } }
+        XCTAssertTrue(sawLitPad)
+    }
+
+    func testBouncingBallIsDeterministic() {
+        let params = PadPatternParams()
+        let gridA = BouncingBallPattern().render(elapsed: 3.14, beat: .idle, params: params)
+        let gridB = BouncingBallPattern().render(elapsed: 3.14, beat: .idle, params: params)
+        XCTAssertEqual(gridA, gridB)
+    }
+
     // MARK: - Registry
 
     func testRegistryContainsAllBuiltInPatterns() {
         let ids = Set(PadPatterns.all.map { type(of: $0).id })
-        XCTAssertEqual(ids, ["plasmaWave", "rainbowChase", "beatRipple", "vuColumns"])
+        XCTAssertEqual(ids, ["plasmaWave", "rainbowChase", "beatRipple", "vuColumns", "sparkle", "bouncingBall"])
     }
 }

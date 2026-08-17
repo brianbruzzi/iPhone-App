@@ -6,7 +6,17 @@ struct LaunchpadControlView: View {
     var body: some View {
         @Bindable var appState = appState
         VStack(alignment: .leading, spacing: 10) {
-            Text("Pixel Art (Launchpad X)").font(.headline)
+            HStack {
+                Text("Pixel Art (Launchpad X)").font(.headline)
+                Spacer()
+                Button {
+                    appState.resetPadSettings()
+                } label: {
+                    Label("Reset", systemImage: "arrow.counterclockwise")
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+            }
 
             PixelGridPreviewView(grid: appState.latestPadGrid)
                 .frame(width: 220, height: 220)
@@ -17,9 +27,9 @@ struct LaunchpadControlView: View {
                 }
             }
 
-            LabeledSlider(label: "Speed", value: $appState.padSpeed, range: 0.1...4)
-            LabeledSlider(label: "Hue Shift", value: $appState.padHueShift, range: 0...1)
-            LabeledSlider(label: "Brightness", value: $appState.padBrightness, range: 0...1)
+            LabeledSlider(label: "Speed", value: $appState.padSpeed, range: 0.1...4, defaultValue: AppState.defaultPadSpeed)
+            LabeledSlider(label: "Hue Shift", value: $appState.padHueShift, range: 0...1, defaultValue: AppState.defaultPadHueShift)
+            LabeledSlider(label: "Brightness", value: $appState.padBrightness, range: 0...1, defaultValue: AppState.defaultPadBrightness)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

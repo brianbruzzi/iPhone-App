@@ -4,26 +4,36 @@ struct ContentView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            DeviceStatusView()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                DeviceStatusView()
 
-            Divider()
+                Divider()
 
-            HStack(alignment: .top, spacing: 24) {
-                FaderControlView()
-                LaunchpadControlView()
+                HStack(alignment: .top, spacing: 24) {
+                    FaderControlView()
+                    LaunchpadControlView()
+                }
+
+                Divider()
+
+                AudioControlView()
+
+                Divider()
+
+                HStack {
+                    MasterSyncToggle()
+                    Spacer()
+                    Button {
+                        appState.resetAll()
+                    } label: {
+                        Label("Reset Everything to Defaults", systemImage: "arrow.counterclockwise")
+                    }
+                }
             }
-
-            Divider()
-
-            AudioControlView()
-
-            Divider()
-
-            MasterSyncToggle()
+            .padding(20)
         }
-        .padding(20)
-        .frame(minWidth: 640, minHeight: 520)
+        .frame(minWidth: 760, minHeight: 640)
     }
 }
 

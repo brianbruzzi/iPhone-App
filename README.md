@@ -99,12 +99,18 @@ Xcode build (and, for anything hardware-facing, the actual devices plugged in) t
 ## Patterns
 
 **Faders:** Wave (sine sweep across the bank), Beat Pulse (unison jump-and-decay on each
-beat), Beat Chase (one fader lit at a time, advancing per beat), Off (releases faders to
+beat), Beat Chase (one fader lit at a time, advancing per beat), Sweep (Knight-Rider-style
+scanning comet), Random Jitter (each fader wanders independently), Off (releases faders to
 manual/DAW control).
 
 **Launchpad:** Plasma Wave (demoscene-style sine-field plasma), Rainbow Chase (diagonal
 hue sweep), Beat Ripple (expanding ring from center on each beat), VU Columns (8 columns
-as a live audio-level meter, green->yellow->red).
+as a live audio-level meter, green->yellow->red), Sparkle (twinkling stars), Bouncing Ball
+(DVD-screensaver-style bounce).
+
+Every slider has a small tick mark showing its default value and a reset icon that
+appears when it's been changed; each panel also has its own "Reset" button, and there's a
+"Reset Everything to Defaults" button at the bottom of the window.
 
 ## Known limitations
 

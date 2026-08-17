@@ -11,22 +11,36 @@ final class AppState {
     let audioEngine = AudioEngine()
     let patternEngine = PatternEngine()
 
-    var faderPatternID: String = WaveFaderPattern.id {
+    // MARK: - Defaults (also used by the Reset buttons in the UI)
+
+    static let defaultFaderPatternID = WaveFaderPattern.id
+    static let defaultFaderSpeed = 1.0
+    static let defaultFaderAmplitude = 1.0
+    static let defaultFaderBaseLevel = 0.5
+
+    static let defaultPadPatternID = PlasmaWavePattern.id
+    static let defaultPadSpeed = 1.0
+    static let defaultPadHueShift = 0.0
+    static let defaultPadBrightness = 1.0
+
+    static let defaultSyncToBeat = true
+
+    var faderPatternID: String = AppState.defaultFaderPatternID {
         didSet { applyFaderPattern() }
     }
-    var padPatternID: String = PlasmaWavePattern.id {
+    var padPatternID: String = AppState.defaultPadPatternID {
         didSet { applyPadPattern() }
     }
 
-    var faderSpeed = 1.0 { didSet { patternEngine.faderParams.speed = faderSpeed } }
-    var faderAmplitude = 1.0 { didSet { patternEngine.faderParams.amplitude = faderAmplitude } }
-    var faderBaseLevel = 0.5 { didSet { patternEngine.faderParams.baseLevel = faderBaseLevel } }
+    var faderSpeed = AppState.defaultFaderSpeed { didSet { patternEngine.faderParams.speed = faderSpeed } }
+    var faderAmplitude = AppState.defaultFaderAmplitude { didSet { patternEngine.faderParams.amplitude = faderAmplitude } }
+    var faderBaseLevel = AppState.defaultFaderBaseLevel { didSet { patternEngine.faderParams.baseLevel = faderBaseLevel } }
 
-    var padSpeed = 1.0 { didSet { patternEngine.padParams.speed = padSpeed } }
-    var padHueShift = 0.0 { didSet { patternEngine.padParams.hueShift = padHueShift } }
-    var padBrightness = 1.0 { didSet { patternEngine.padParams.brightness = padBrightness } }
+    var padSpeed = AppState.defaultPadSpeed { didSet { patternEngine.padParams.speed = padSpeed } }
+    var padHueShift = AppState.defaultPadHueShift { didSet { patternEngine.padParams.hueShift = padHueShift } }
+    var padBrightness = AppState.defaultPadBrightness { didSet { patternEngine.padParams.brightness = padBrightness } }
 
-    var syncToBeat = true { didSet { patternEngine.syncToBeat = syncToBeat } }
+    var syncToBeat = AppState.defaultSyncToBeat { didSet { patternEngine.syncToBeat = syncToBeat } }
 
     private(set) var midiStartError: String?
     private(set) var audioLoadError: String?
@@ -74,6 +88,28 @@ final class AppState {
         } catch {
             audioLoadError = "Couldn't load \(url.lastPathComponent): \(error.localizedDescription)"
         }
+    }
+
+    // MARK: - Reset to defaults
+
+    func resetFaderSettings() {
+        faderPatternID = AppState.defaultFaderPatternID
+        faderSpeed = AppState.defaultFaderSpeed
+        faderAmplitude = AppState.defaultFaderAmplitude
+        faderBaseLevel = AppState.defaultFaderBaseLevel
+    }
+
+    func resetPadSettings() {
+        padPatternID = AppState.defaultPadPatternID
+        padSpeed = AppState.defaultPadSpeed
+        padHueShift = AppState.defaultPadHueShift
+        padBrightness = AppState.defaultPadBrightness
+    }
+
+    func resetAll() {
+        resetFaderSettings()
+        resetPadSettings()
+        syncToBeat = AppState.defaultSyncToBeat
     }
 
     // MARK: - Wiring
