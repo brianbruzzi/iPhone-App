@@ -30,14 +30,32 @@ struct AudioControlView: View {
                         .lineLimit(1)
                 }
 
-                Button(appState.audioEngine.isPlaying ? "Pause" : "Play") {
-                    if appState.audioEngine.isPlaying {
-                        appState.audioEngine.pause()
-                    } else {
-                        appState.audioEngine.play()
+                HStack(spacing: 6) {
+                    Button {
+                        appState.audioEngine.restartFromBeginning()
+                    } label: {
+                        Image(systemName: "backward.end.fill")
                     }
+                    .disabled(appState.audioEngine.trackURL == nil)
+                    .help("Restart from the beginning")
+
+                    Button(appState.audioEngine.isPlaying ? "Pause" : "Play") {
+                        if appState.audioEngine.isPlaying {
+                            appState.audioEngine.pause()
+                        } else {
+                            appState.audioEngine.play()
+                        }
+                    }
+                    .disabled(appState.audioEngine.trackURL == nil)
+
+                    Button {
+                        appState.audioEngine.stop()
+                    } label: {
+                        Image(systemName: "stop.fill")
+                    }
+                    .disabled(appState.audioEngine.trackURL == nil)
+                    .help("Stop and reset to the beginning")
                 }
-                .disabled(appState.audioEngine.trackURL == nil)
 
                 Text(formattedTime(appState.audioEngine.elapsedSeconds))
                     .monospacedDigit()

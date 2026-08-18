@@ -116,10 +116,108 @@ final class PadPatternTests: XCTestCase {
         XCTAssertEqual(gridA, gridB)
     }
 
+    // MARK: - Ember fire
+
+    func testEmberFireZeroBrightnessIsAllBlack() {
+        let params = PadPatternParams(speed: 1, hueShift: 0, brightness: 0)
+        let grid = EmberFirePattern().render(elapsed: 1.2, beat: .idle, params: params)
+        XCTAssertEqual(grid, .allBlack)
+    }
+
+    func testEmberFireBottomRowLitBrighterThanTop() {
+        let params = PadPatternParams(speed: 1, hueShift: 0, brightness: 1)
+        let grid = EmberFirePattern().render(elapsed: 0, beat: .idle, params: params)
+        // Every column's flame reaches at least partway up, so the base row should never
+        // be black, while the very top row (a flame height of ~7) is only lit on the
+        // tallest flicker peaks — not guaranteed lit at every instant.
+        for x in 0..<8 {
+            XCTAssertNotEqual(grid[x, 7], .black, "column \(x)'s base should always be lit")
+        }
+    }
+
+    func testEmberFireIsDeterministic() {
+        let params = PadPatternParams(speed: 1, hueShift: 0.1, brightness: 1)
+        let gridA = EmberFirePattern().render(elapsed: 4.4, beat: .idle, params: params)
+        let gridB = EmberFirePattern().render(elapsed: 4.4, beat: .idle, params: params)
+        XCTAssertEqual(gridA, gridB)
+    }
+
+    // MARK: - Strobe pulse
+
+    func testStrobePulseFlashesBrightRightOnTheBeat() {
+        let params = PadPatternParams(speed: 1, hueShift: 0, brightness: 1)
+        let beat = BeatClockSnapshot(bpm: 120, phase: 0, beatIndex: 0, isLive: true)
+        let grid = StrobePulsePattern().render(elapsed: 0, beat: beat, params: params)
+        XCTAssertNotEqual(grid[0, 0], .black)
+        XCTAssertEqual(grid, PixelGrid(repeating: grid[0, 0]), "the strobe flash should cover every pad uniformly")
+    }
+
+    func testStrobePulseFadesToBlackLateInTheBeat() {
+        let params = PadPatternParams(speed: 1, hueShift: 0, brightness: 1)
+        let beat = BeatClockSnapshot(bpm: 120, phase: 0.99, beatIndex: 0, isLive: true)
+        let grid = StrobePulsePattern().render(elapsed: 0, beat: beat, params: params)
+        XCTAssertEqual(grid, .allBlack)
+    }
+
+    func testStrobePulseZeroBrightnessIsAllBlack() {
+        let params = PadPatternParams(speed: 1, hueShift: 0, brightness: 0)
+        let beat = BeatClockSnapshot(bpm: 120, phase: 0, beatIndex: 0, isLive: true)
+        let grid = StrobePulsePattern().render(elapsed: 0, beat: beat, params: params)
+        XCTAssertEqual(grid, .allBlack)
+    }
+
+    // MARK: - Spiral sweep
+
+    func testSpiralSweepZeroBrightnessIsAllBlack() {
+        let params = PadPatternParams(speed: 1, hueShift: 0, brightness: 0)
+        let grid = SpiralSweepPattern().render(elapsed: 2.5, beat: .idle, params: params)
+        XCTAssertEqual(grid, .allBlack)
+    }
+
+    func testSpiralSweepIsDeterministic() {
+        let params = PadPatternParams(speed: 1, hueShift: 0.3, brightness: 1)
+        let gridA = SpiralSweepPattern().render(elapsed: 6.0, beat: .idle, params: params)
+        let gridB = SpiralSweepPattern().render(elapsed: 6.0, beat: .idle, params: params)
+        XCTAssertEqual(gridA, gridB)
+    }
+
+    // MARK: - VB Eye
+
+    func testVBEyeOpenIsSymmetricTopToBottomWithColorSwap() {
+        let params = PadPatternParams(speed: 1, hueShift: 0.5, brightness: 1) // hueShift ignored
+        let grid = VBEyePattern().render(elapsed: 1.0, beat: .idle, params: params) // outside the blink window
+
+        // Corners: yellow up top, red on the bottom — the brand mark's color split.
+        XCTAssertEqual(grid[2, 0], RGBColor(r: 225, g: 200, b: 50))
+        XCTAssertEqual(grid[2, 7], RGBColor(r: 200, g: 75, b: 50))
+        // The iris/pupil pair at the true center is identical on both middle rows.
+        XCTAssertEqual(grid[2, 3], grid[2, 4])
+        XCTAssertEqual(grid[3, 3], .black, "pupil should be black")
+    }
+
+    func testVBEyeBlinksBrieflyThenReopens() {
+        let params = PadPatternParams(speed: 1, hueShift: 0, brightness: 1)
+        let blinking = VBEyePattern().render(elapsed: 0.0, beat: .idle, params: params)
+        let open = VBEyePattern().render(elapsed: 1.0, beat: .idle, params: params)
+
+        XCTAssertEqual(blinking[0, 0], .black)
+        XCTAssertEqual(blinking[0, 3], .black, "eyelid seam starts a column in, not at the very edge")
+        XCTAssertNotEqual(open[2, 0], .black, "should be back to the open eye a second later")
+    }
+
+    func testVBEyeZeroBrightnessIsAllBlack() {
+        let params = PadPatternParams(speed: 1, hueShift: 0, brightness: 0)
+        let grid = VBEyePattern().render(elapsed: 1.0, beat: .idle, params: params)
+        XCTAssertEqual(grid, .allBlack)
+    }
+
     // MARK: - Registry
 
     func testRegistryContainsAllBuiltInPatterns() {
         let ids = Set(PadPatterns.all.map { type(of: $0).id })
-        XCTAssertEqual(ids, ["plasmaWave", "rainbowChase", "beatRipple", "vuColumns", "sparkle", "bouncingBall"])
+        XCTAssertEqual(ids, [
+            "plasmaWave", "rainbowChase", "beatRipple", "vuColumns", "sparkle", "bouncingBall",
+            "emberFire", "strobePulse", "spiralSweep", "vbEye"
+        ])
     }
 }

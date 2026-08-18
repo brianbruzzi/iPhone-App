@@ -29,6 +29,14 @@ final class AudioEngine {
 
     private let tapBufferSize: AVAudioFrameCount = 1024
 
+    /// Bumped every time a file is (re)scheduled, so a stale completion handler from a
+    /// schedule that `stop()`/`restartFromBeginning()` has since superseded can't clobber
+    /// `isPlaying` after a fresh one has already started. AVAudioPlayerNode invokes a
+    /// segment's completion handler when it's displaced, not just when it finishes
+    /// naturally, so without this guard rapid stop/restart taps could flicker Play back to
+    /// Pause a moment after the user pressed it.
+    private var scheduleGeneration = 0
+
     init() {
         engine.attach(player)
     }
@@ -51,9 +59,7 @@ final class AudioEngine {
             try engine.start()
         }
 
-        player.scheduleFile(file, at: nil) { [weak self] in
-            DispatchQueue.main.async { self?.isPlaying = false }
-        }
+        scheduleFromStart()
     }
 
     func play() {
@@ -66,6 +72,45 @@ final class AudioEngine {
         guard isPlaying else { return }
         player.pause()
         isPlaying = false
+    }
+
+    /// Stops playback and resets to the beginning — same as loading the track fresh, so
+    /// pressing Play afterward starts over from 0.
+    func stop() {
+        guard audioFile != nil else { return }
+        player.stop()
+        isPlaying = false
+        elapsedSeconds = 0
+        scheduleFromStart()
+    }
+
+    /// Seeks back to the beginning without changing whether playback is running: still
+    /// playing afterward if it was playing, still paused if it was paused.
+    func restartFromBeginning() {
+        guard audioFile != nil else { return }
+        let wasPlaying = isPlaying
+        player.stop()
+        elapsedSeconds = 0
+        scheduleFromStart()
+        if wasPlaying {
+            player.play()
+            isPlaying = true
+        }
+    }
+
+    /// (Re)schedules the whole loaded file from its beginning — `AVAudioPlayerNode.
+    /// scheduleFile` always plays a file from frame 0, so this is also how `stop()` and
+    /// `restartFromBeginning()` seek back to the start.
+    private func scheduleFromStart() {
+        guard let file = audioFile else { return }
+        scheduleGeneration += 1
+        let generation = scheduleGeneration
+        player.scheduleFile(file, at: nil) { [weak self] in
+            DispatchQueue.main.async {
+                guard let self, self.scheduleGeneration == generation else { return }
+                self.isPlaying = false
+            }
+        }
     }
 
     /// Sets tempo directly (e.g. from a UI field) for use before any track is loaded, or
