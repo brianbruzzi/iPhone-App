@@ -105,6 +105,11 @@ final class MIDIManager {
     /// would mean the dropped LEDs are diffed out and never re-sent.
     private var lastSentSurfaceFrame: SurfaceFrame?
 
+    /// Last text written to the 12-digit 7-segment display. Unlike the VU meters (which
+    /// decay and must be re-sent), the display latches, so this is a plain dedup cache —
+    /// nil means "unknown", forcing the next write through.
+    private var lastSentDisplayText: String?
+
     /// When the surface cache was last force-refreshed via a full repaint. CoreMIDI
     /// reporting `MIDISend` as successful only means the bytes were handed to the driver,
     /// not that the USB-MIDI surface actually received/rendered them — a silent drop like
@@ -314,6 +319,7 @@ final class MIDIManager {
         // Bypasses both caches, so both must be invalidated: a pattern frame landing right
         // after this must never trust stale "already lit/positioned" state.
         lastSentSurfaceFrame = nil
+        lastSentDisplayText = nil
 
         if includeFaders {
             let faderMessages = (0..<XTouchProtocol.faderCount).map {
@@ -388,6 +394,65 @@ final class MIDIManager {
             sendBatch(slice, to: destination)
         }
         lastSentSurfaceFrame = nil
+    }
+
+    /// Drives the 8 hardware VU meters from 0...1 unit levels. Deliberately un-cached and
+    /// un-diffed, unlike every other surface send: the meters decay on their own at roughly
+    /// 300ms per division, so an unchanged value still has to be re-sent to hold the meter
+    /// where it is. Callers are expected to call this on a timer (see `AppState.tick`).
+    func sendXTouchVULevels(_ levels: [Double]) {
+        guard let destination = xTouchDestination, outputPort != 0 else { return }
+        guard effectiveSurfaceMode == .mackieControl else { return }
+
+        let messages = (0..<XTouchSurfaceProtocol.stripCount).map { strip -> [UInt8] in
+            let unit = strip < levels.count ? levels[strip] : 0
+            return XTouchSurfaceProtocol.vuLevelBytes(
+                strip: strip, level: XTouchSurfaceProtocol.vuLevel(forUnitValue: unit)
+            )
+        }
+        // Not forced: at ~15Hz this would otherwise flood the monitor and bury the
+        // occasional message that actually matters for diagnosing a problem.
+        if let first = messages.first {
+            monitor.recordOutgoing(first)
+        }
+        sendBatch(messages, to: destination)
+    }
+
+    /// Turns the dedicated LED meters on or off for all 8 strips.
+    func sendXTouchVUEnabled(_ enabled: Bool) {
+        guard let destination = xTouchDestination, outputPort != 0 else { return }
+        guard effectiveSurfaceMode == .mackieControl else { return }
+
+        let messages = (0..<XTouchSurfaceProtocol.stripCount).map {
+            XTouchSurfaceProtocol.vuEnableMessage(strip: $0, enabled: enabled)
+        }
+        if let first = messages.first {
+            monitor.recordOutgoing(first, force: true)
+        }
+        sendBatch(messages, to: destination)
+
+        // Turning meters off leaves them wherever they last decayed to; blank them so the
+        // strip reads as deliberately off rather than as a stuck meter.
+        if !enabled {
+            sendXTouchVULevels([Double](repeating: 0, count: XTouchSurfaceProtocol.stripCount))
+        }
+    }
+
+    /// Writes text across the 12-digit 7-segment display. Cached, unlike the VU meters —
+    /// the display holds whatever it was last sent, so there's nothing to refresh.
+    func sendXTouchDisplayText(_ text: String) {
+        guard let destination = xTouchDestination, outputPort != 0 else { return }
+        guard effectiveSurfaceMode == .mackieControl else {
+            lastSentDisplayText = nil
+            return
+        }
+        guard text != lastSentDisplayText else { return }
+
+        let messages = XTouchSurfaceProtocol.displayTextMessages(text)
+        if let first = messages.first {
+            monitor.recordOutgoing(first, force: true)
+        }
+        lastSentDisplayText = sendBatch(messages, to: destination) ? text : nil
     }
 
     func sendLaunchpadFrame(_ grid: PixelGrid) {

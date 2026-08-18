@@ -18,6 +18,14 @@ final class AudioEngine {
     /// Playback position in seconds, refreshed once per animation tick by `AppState`
     /// (rather than running its own timer) — see `refreshElapsedTime()`.
     private(set) var elapsedSeconds: TimeInterval = 0
+    /// Length of the loaded track, or 0 if none. Used to wrap the position readout when
+    /// looping — see `refreshElapsedTime()`.
+    private(set) var trackDuration: TimeInterval = 0
+
+    /// When true, reaching the end of the track immediately restarts it instead of
+    /// stopping. Safe to toggle mid-playback — it's read when the current schedule
+    /// finishes, not captured when playback starts.
+    var isLooping = false
 
     /// Shared beat clock — the single source of truth both pattern engines read from.
     let beatClock = BeatClock()
@@ -49,6 +57,9 @@ final class AudioEngine {
         let file = try AVAudioFile(forReading: url)
         audioFile = file
         trackURL = url
+        trackDuration = file.processingFormat.sampleRate > 0
+            ? Double(file.length) / file.processingFormat.sampleRate
+            : 0
 
         let format = file.processingFormat
         engine.connect(player, to: engine.mainMixerNode, format: format)
@@ -108,7 +119,15 @@ final class AudioEngine {
         player.scheduleFile(file, at: nil) { [weak self] in
             DispatchQueue.main.async {
                 guard let self, self.scheduleGeneration == generation else { return }
-                self.isPlaying = false
+                // Looping re-arms the file rather than stopping. `isPlaying` is left alone
+                // so the transport never flickers to Paused between laps; the node keeps
+                // running, it just gets another segment queued behind the one that ended.
+                if self.isLooping, self.isPlaying {
+                    self.scheduleFromStart()
+                    self.player.play()
+                } else {
+                    self.isPlaying = false
+                }
             }
         }
     }
@@ -126,7 +145,11 @@ final class AudioEngine {
         guard let nodeTime = player.lastRenderTime, let playerTime = player.playerTime(forNodeTime: nodeTime) else {
             return
         }
-        elapsedSeconds = Double(playerTime.sampleTime) / playerTime.sampleRate
+        let raw = Double(playerTime.sampleTime) / playerTime.sampleRate
+        // A loop re-schedules without stopping the node, so `sampleTime` keeps counting up
+        // across laps rather than resetting — wrap it so the readout shows the position
+        // within the track instead of total time played.
+        elapsedSeconds = trackDuration > 0 ? raw.truncatingRemainder(dividingBy: trackDuration) : raw
     }
 
     /// "Now" in the same host-time base the audio tap stamps onsets with, for taking a

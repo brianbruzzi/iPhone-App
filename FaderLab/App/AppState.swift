@@ -2,6 +2,25 @@ import Foundation
 import Observation
 import FaderLabCore
 
+/// What drives the X-Touch's 8 hardware VU meters. They're independent of the button/ring
+/// light show — the meters are their own physical LED strips with their own auto-decaying
+/// protocol — so they get their own source selection rather than following a pattern.
+enum VUMeterSource: String, CaseIterable, Identifiable {
+    case off
+    case faders
+    case audioLevel
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .off: return "Off"
+        case .faders: return "Follow Faders"
+        case .audioLevel: return "Audio Level"
+        }
+    }
+}
+
 /// Composition root: owns `MIDIManager`, `AudioEngine`, and `PatternEngine`, wires them
 /// together, and drives the 60Hz animation tick (faders every tick, pads/surface every
 /// other tick) that turns pattern output into MIDI traffic. SwiftUI views bind directly to
@@ -31,6 +50,9 @@ final class AppState {
     static let defaultRightSectionIntensity = 1.0
 
     static let defaultXTouchSpeed = 1.0
+
+    static let defaultVUMeterSource = VUMeterSource.faders
+    static let defaultDisplayText = "FADER LAB"
 
     static let defaultSyncToBeat = true
 
@@ -79,6 +101,21 @@ final class AppState {
         }
     }
 
+    /// Drives the 8 hardware VU meters. Switching away from `.off` re-enables the meters on
+    /// the surface; switching to `.off` blanks them.
+    var vuMeterSource = AppState.defaultVUMeterSource {
+        didSet {
+            guard vuMeterSource != oldValue else { return }
+            midiManager.sendXTouchVUEnabled(vuMeterSource != .off)
+        }
+    }
+
+    /// Text shown on the X-Touch's 12-digit 7-segment display. Being 7-segment, some
+    /// letters (M, W, K, V, X) only render as rough approximations.
+    var displayText = AppState.defaultDisplayText {
+        didSet { midiManager.sendXTouchDisplayText(displayText) }
+    }
+
     var syncToBeat = AppState.defaultSyncToBeat { didSet { patternEngine.syncToBeat = syncToBeat } }
 
     private(set) var midiStartError: String?
@@ -118,6 +155,12 @@ final class AppState {
         } catch {
             midiStartError = "MIDI setup failed: \(error)"
         }
+
+        // Both live outside the diffed surface frame, so nothing else would push them to
+        // the hardware on connect — the display would sit blank and the meters inert until
+        // the user happened to change one.
+        midiManager.sendXTouchVUEnabled(vuMeterSource != .off)
+        midiManager.sendXTouchDisplayText(displayText)
 
         transportClock = TransportClock(startedAt: audioEngine.currentHostTimeSeconds())
         isPatternPaused = false
@@ -185,6 +228,8 @@ final class AppState {
         resetFaderSettings()
         resetSurfaceSettings()
         resetRightSectionSettings()
+        vuMeterSource = AppState.defaultVUMeterSource
+        displayText = AppState.defaultDisplayText
     }
 
     func resetAll() {
@@ -291,7 +336,32 @@ final class AppState {
             patternEngine.tick(elapsed: elapsed, beat: beat, components: components)
         }
 
+        // VU meters get their own cadence: they decay in hardware (~300ms per division), so
+        // they need continuous re-sending rather than the diff-on-change treatment the rest
+        // of the surface gets. Every 4th tick (15Hz) is far quicker than the decay while
+        // costing a fraction of the traffic of doing it every frame.
+        if tickCount.isMultiple(of: 4) {
+            sendVUFrameIfNeeded()
+        }
+
         audioEngine.refreshElapsedTime()
+    }
+
+    private func sendVUFrameIfNeeded() {
+        // Paused freezes the hardware where it is for the button/fader show, but VU meters
+        // physically can't hold — they'd sag to nothing regardless — so keep feeding them
+        // the frozen levels rather than letting them decay to a misleading zero.
+        switch vuMeterSource {
+        case .off:
+            return
+        case .faders:
+            midiManager.sendXTouchVULevels(latestFaderValues)
+        case .audioLevel:
+            let level = audioEngine.currentAudioLevel
+            midiManager.sendXTouchVULevels(
+                [Double](repeating: level, count: XTouchSurfaceProtocol.stripCount)
+            )
+        }
     }
 
     private func sendFaderFrame(_ values: [Double]) {

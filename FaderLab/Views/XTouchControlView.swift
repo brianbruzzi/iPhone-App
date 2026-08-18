@@ -58,6 +58,26 @@ struct XTouchControlView: View {
                 label: "Other Buttons Intensity", value: $appState.rightSectionIntensity,
                 range: 0...1, defaultValue: AppState.defaultRightSectionIntensity
             )
+
+            Divider().padding(.vertical, 4)
+
+            sectionHeader("Meters & Display")
+
+            Picker("VU Meters", selection: $appState.vuMeterSource) {
+                ForEach(VUMeterSource.allCases) { source in
+                    Text(source.displayName).tag(source)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Display Text").font(.caption)
+                TextField("FADER LAB", text: $appState.displayText)
+                    .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
+                Text("12 characters on the 7-segment display. M, W, K, V and X only render roughly.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

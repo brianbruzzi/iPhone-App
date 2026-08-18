@@ -238,17 +238,35 @@ public enum XTouchSurfaceProtocol {
     /// see `XTouchSurfaceProtocolTests` for the enforcing test.
     public static let forbiddenSysExCommand: UInt8 = 0x04
 
-    // MARK: - VU meters (byte encoders only — not wired into SurfaceFrame this round;
-    // their ~0.4s auto-decay requires periodic resending regardless of change, which
-    // doesn't fit the diff-only "resend only what changed" model the rest of this file
-    // follows. Included now so a future round doesn't have to re-derive the protocol.)
+    // MARK: - VU meters
+    //
+    // Deliberately NOT part of `SurfaceFrame`: the hardware meters decay on their own at
+    // roughly 300ms per division, so they have to be re-sent continuously even when the
+    // value hasn't changed. That's the opposite of the diff-only "send only what changed"
+    // model every other element here follows, so VU gets its own un-cached send path in
+    // `MIDIManager` rather than being wedged into the frame diff.
+
+    /// Level `0x0E`/`0x0F` are "set overload"/"clear overload" latches, not levels —
+    /// `vuLevelBytes` clamps below them so a runaway value can never accidentally latch a
+    /// clip indicator on that then needs an explicit clear to release.
+    public static let vuMaxLevel = 0x0D
 
     /// Channel Pressure, packing strip (high nibble) and level (low nibble) into one byte.
     /// `level` 0...12 = -60dB...0dB in the surface's fixed table, 13 = >0dB (clamped).
     public static func vuLevelBytes(strip: Int, level: Int) -> [UInt8] {
         precondition((0..<stripCount).contains(strip), "strip index out of range: \(strip)")
-        let clampedLevel = UInt8(min(max(level, 0), 0x0D))
+        let clampedLevel = UInt8(min(max(level, 0), vuMaxLevel))
         return [0xD0, (UInt8(strip) << 4) | clampedLevel]
+    }
+
+    /// Maps a 0...1 unit value (a fader position or an audio level) onto the meter's
+    /// 0...13 division scale. Linear in divisions rather than in dB: the meter's own
+    /// scale is already heavily compressed at the top (0x9...0x0C covers just -6dB...0dB),
+    /// so a straight linear map reads as a full, even sweep across the LEDs.
+    public static func vuLevel(forUnitValue unitValue: Double) -> Int {
+        guard unitValue.isFinite else { return 0 }
+        let clamped = min(max(unitValue, 0), 1)
+        return Int((clamped * Double(vuMaxLevel)).rounded())
     }
 
     /// Enables/disables the strip's dedicated LED-only VU meter (mode byte `0x01`).
@@ -256,5 +274,61 @@ public enum XTouchSurfaceProtocol {
         precondition((0..<stripCount).contains(strip), "strip index out of range: \(strip)")
         let mode: UInt8 = enabled ? 0x01 : 0x00
         return scribbleSysExHeader + [channelMeterModeCommand, UInt8(strip), mode] + [sysExTerminator]
+    }
+
+    // MARK: - 7-segment display (timecode + assignment): Control Change, channel 1
+    //
+    // The 12-digit LED display across the top right of the surface: a 10-digit timecode
+    // readout plus the 2-digit "Assignment" block to its left. Plain Control Change, so —
+    // like the button notes — a digit the hardware doesn't implement is simply ignored,
+    // with none of the risk the forbidden SysEx command above carries.
+    //
+    // Note numbers and value encoding follow the Mackie Control spec as documented by
+    // TouchMCU (the same hardware-validated reference this file's button map is checked
+    // against) and corroborated by libMackieControl.
+
+    /// CC `0x40` addresses the **rightmost** digit and `0x4B` the leftmost — the display is
+    /// numbered like a counter, right to left. `timecodeMessages(text:)` handles the
+    /// reversal so callers can just pass ordinary left-to-right text.
+    public static let displayCCBase: UInt8 = 0x40
+    public static let displayDigitCount = 12
+
+    /// Bit 6 of the value byte lights that digit's decimal point.
+    private static let displayDotBit: UInt8 = 0x40
+
+    /// The display understands ASCII `0x20...0x5F` — space, punctuation, digits, and
+    /// uppercase letters — encoded as the low 6 bits of the character. Lowercase is
+    /// upper-cased; anything else becomes a space.
+    ///
+    /// Being 7-segment, the glyphs are approximations: `M`, `W`, `K`, `V`, and `X` have no
+    /// faithful 7-segment form and will render as rough stand-ins. That's a property of the
+    /// hardware, not of this encoding.
+    public static func displayDigitValue(for character: Character, dot: Bool = false) -> UInt8 {
+        let uppercased = String(character).uppercased()
+        let scalar = uppercased.unicodeScalars.first.map { $0.value } ?? 0x20
+        let ascii: UInt32 = (scalar >= 0x20 && scalar <= 0x5F) ? scalar : 0x20
+        return UInt8(ascii & 0x3F) | (dot ? displayDotBit : 0)
+    }
+
+    /// Encodes one digit position. `position` 0 is the **leftmost** digit (reading order),
+    /// which is the opposite of the underlying CC numbering — see `displayCCBase`.
+    public static func displayDigitBytes(position: Int, character: Character, dot: Bool = false) -> [UInt8] {
+        precondition((0..<displayDigitCount).contains(position), "digit position out of range: \(position)")
+        let cc = displayCCBase + UInt8(displayDigitCount - 1 - position)
+        return [controlChangeStatusChannel1, cc, displayDigitValue(for: character, dot: dot)]
+    }
+
+    /// Encodes `text` across all 12 digits, left-aligned in reading order and space-padded
+    /// (so a shorter message blanks the rest of the display rather than leaving stale
+    /// characters behind). Longer text is truncated. Always returns exactly
+    /// `displayDigitCount` messages.
+    public static func displayTextMessages(_ text: String) -> [[UInt8]] {
+        var characters = Array(text.prefix(displayDigitCount))
+        while characters.count < displayDigitCount {
+            characters.append(" ")
+        }
+        return characters.enumerated().map { position, character in
+            displayDigitBytes(position: position, character: character)
+        }
     }
 }

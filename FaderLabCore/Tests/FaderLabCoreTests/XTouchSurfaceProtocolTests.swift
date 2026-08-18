@@ -213,6 +213,107 @@ final class XTouchSurfaceProtocolTests: XCTestCase {
         XCTAssertEqual(XTouchSurfaceProtocol.vuLevelBytes(strip: 0, level: -5), [0xD0, 0x00])
     }
 
+    func testVULevelNeverReachesTheOverloadLatches() {
+        // 0x0E/0x0F are set/clear-overload commands, not levels — a value that ran past
+        // 0x0D would latch a clip indicator that then needs an explicit clear to release.
+        for unit in [-1.0, 0.0, 0.5, 1.0, 2.0, Double.nan, Double.infinity] {
+            let level = XTouchSurfaceProtocol.vuLevel(forUnitValue: unit)
+            XCTAssertLessThanOrEqual(level, XTouchSurfaceProtocol.vuMaxLevel)
+            XCTAssertGreaterThanOrEqual(level, 0)
+        }
+    }
+
+    func testVULevelMapsUnitRangeAcrossTheFullScale() {
+        XCTAssertEqual(XTouchSurfaceProtocol.vuLevel(forUnitValue: 0), 0)
+        XCTAssertEqual(XTouchSurfaceProtocol.vuLevel(forUnitValue: 1), XTouchSurfaceProtocol.vuMaxLevel)
+        XCTAssertEqual(XTouchSurfaceProtocol.vuLevel(forUnitValue: 0.5), 7) // round(0.5 * 13)
+    }
+
+    // MARK: - 7-segment display
+
+    func testDisplayDigitValueEncodesAsLowSixBitsOfASCII() {
+        XCTAssertEqual(XTouchSurfaceProtocol.displayDigitValue(for: "0"), 0x30)
+        XCTAssertEqual(XTouchSurfaceProtocol.displayDigitValue(for: "9"), 0x39)
+        XCTAssertEqual(XTouchSurfaceProtocol.displayDigitValue(for: "A"), 0x01)
+        XCTAssertEqual(XTouchSurfaceProtocol.displayDigitValue(for: "Z"), 0x1A)
+        XCTAssertEqual(XTouchSurfaceProtocol.displayDigitValue(for: " "), 0x20)
+    }
+
+    func testDisplayDigitValueUppercasesAndFallsBackToSpace() {
+        XCTAssertEqual(
+            XTouchSurfaceProtocol.displayDigitValue(for: "a"),
+            XTouchSurfaceProtocol.displayDigitValue(for: "A")
+        )
+        // Outside the supported 0x20...0x5F window (lowercase already handled above).
+        XCTAssertEqual(XTouchSurfaceProtocol.displayDigitValue(for: "\u{7F}"), 0x20)
+        XCTAssertEqual(XTouchSurfaceProtocol.displayDigitValue(for: "é"), 0x20)
+        XCTAssertEqual(XTouchSurfaceProtocol.displayDigitValue(for: "\t"), 0x20)
+    }
+
+    func testDisplayDotSetsBitSixWithoutDisturbingTheCharacter() {
+        let plain = XTouchSurfaceProtocol.displayDigitValue(for: "5")
+        let dotted = XTouchSurfaceProtocol.displayDigitValue(for: "5", dot: true)
+        XCTAssertEqual(dotted, plain | 0x40)
+        XCTAssertEqual(dotted & 0x3F, plain)
+    }
+
+    /// CC 0x40 is the *rightmost* digit, so reading-order position 0 must land on the
+    /// highest CC. Getting this backwards would silently render every message mirrored.
+    func testDisplayDigitPositionZeroIsLeftmostAndMapsToHighestCC() {
+        XCTAssertEqual(
+            XTouchSurfaceProtocol.displayDigitBytes(position: 0, character: "A"),
+            [0xB0, 0x4B, 0x01]
+        )
+        XCTAssertEqual(
+            XTouchSurfaceProtocol.displayDigitBytes(position: 11, character: "A"),
+            [0xB0, 0x40, 0x01]
+        )
+    }
+
+    func testDisplayTextIsLeftAlignedAndSpacePadded() {
+        let messages = XTouchSurfaceProtocol.displayTextMessages("HI")
+        XCTAssertEqual(messages.count, XTouchSurfaceProtocol.displayDigitCount)
+
+        // "H" leftmost (CC 0x4B), "I" next (CC 0x4A), the rest blanked.
+        XCTAssertEqual(messages[0], [0xB0, 0x4B, XTouchSurfaceProtocol.displayDigitValue(for: "H")])
+        XCTAssertEqual(messages[1], [0xB0, 0x4A, XTouchSurfaceProtocol.displayDigitValue(for: "I")])
+        for message in messages.dropFirst(2) {
+            XCTAssertEqual(message[2], 0x20, "unused digits must be blanked, not left stale")
+        }
+    }
+
+    func testDisplayTextTruncatesPastTwelveCharacters() {
+        let messages = XTouchSurfaceProtocol.displayTextMessages("ABCDEFGHIJKLMNOP")
+        XCTAssertEqual(messages.count, XTouchSurfaceProtocol.displayDigitCount)
+        XCTAssertEqual(messages[0][2], XTouchSurfaceProtocol.displayDigitValue(for: "A"))
+        XCTAssertEqual(messages[11][2], XTouchSurfaceProtocol.displayDigitValue(for: "L"))
+    }
+
+    /// The exact message this was built for — 10 characters across the timecode block.
+    func testDisplayTextRendersSmartStopInReadingOrder() {
+        let messages = XTouchSurfaceProtocol.displayTextMessages("SMART STOP")
+        let byCC = Dictionary(uniqueKeysWithValues: messages.map { ($0[1], $0[2]) })
+
+        for (offset, character) in Array("SMART STOP").enumerated() {
+            let cc = UInt8(0x4B - offset)
+            XCTAssertEqual(
+                byCC[cc], XTouchSurfaceProtocol.displayDigitValue(for: character),
+                "character \(offset) ('\(character)') landed on the wrong digit"
+            )
+        }
+    }
+
+    func testDisplayMessagesAreAllControlChangeNeverSysEx() {
+        // Cheap insurance that the display path can never wander into SysEx territory,
+        // where the forbidden 0x04 command lives.
+        for message in XTouchSurfaceProtocol.displayTextMessages("TEST 12345") {
+            XCTAssertEqual(message.count, 3)
+            XCTAssertEqual(message[0], 0xB0)
+            XCTAssertTrue((0x40...0x4B).contains(message[1]))
+            XCTAssertLessThan(message[2], 0x80, "value byte must stay 7-bit")
+        }
+    }
+
     func testVUEnableMessage() {
         XCTAssertEqual(
             XTouchSurfaceProtocol.vuEnableMessage(strip: 2, enabled: true),

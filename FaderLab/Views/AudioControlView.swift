@@ -55,6 +55,14 @@ struct AudioControlView: View {
                     }
                     .disabled(appState.audioEngine.trackURL == nil)
                     .help("Stop and reset to the beginning")
+
+                    Button {
+                        appState.audioEngine.isLooping.toggle()
+                    } label: {
+                        Image(systemName: "repeat")
+                            .foregroundStyle(appState.audioEngine.isLooping ? Color.accentColor : Color.secondary)
+                    }
+                    .help(appState.audioEngine.isLooping ? "Looping — click to play once" : "Play once — click to loop")
                 }
 
                 Text(formattedTime(appState.audioEngine.elapsedSeconds))
