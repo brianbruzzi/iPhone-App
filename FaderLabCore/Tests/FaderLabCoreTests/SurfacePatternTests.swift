@@ -233,6 +233,22 @@ final class SurfacePatternTests: XCTestCase {
         }
     }
 
+    /// "Follow Faders" is the default for the X-Touch's right-hand cluster, where it renders
+    /// in isolation — every right-section zone must be touched, or the cluster falls back to
+    /// `SurfaceFrame.allOff`'s `.off` and sits dark, breaking the never-fully-dark rule that
+    /// the density regression below only checks across the whole surface.
+    func testFaderMirrorTouchesEveryRightSectionNote() {
+        for level in [0.0, 0.5, 1.0] {
+            let faders = [Double](repeating: level, count: XTouchProtocol.faderCount)
+            let frame = FaderMirrorSurfacePattern().render(
+                elapsed: 0, beat: .idle, params: SurfacePatternParams(), faders: faders
+            )
+            for note in XTouchSurfaceProtocol.rightSectionButtonNotes {
+                XCTAssertNotEqual(frame[buttonNote: note], .off, "note \(note) went dark at fader level \(level)")
+            }
+        }
+    }
+
     // MARK: - Density regression (Round 5)
 
     /// Encodes the actual complaint this round fixed: even though every button was

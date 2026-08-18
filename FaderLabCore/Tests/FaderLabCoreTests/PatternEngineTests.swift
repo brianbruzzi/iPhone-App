@@ -161,6 +161,73 @@ final class PatternEngineTests: XCTestCase {
 
         XCTAssertEqual(receivedFaders, Array(repeating: 0.3, count: XTouchProtocol.faderCount))
     }
+
+    // MARK: - Right-hand section splice
+
+    /// Channel strip Off + right section Full Surface: only notes 40+ light, and the
+    /// encoder rings / scribble strips (physically part of the channel strips) stay with
+    /// the channel-strip pattern rather than leaking in from the right-hand render.
+    func testRightSectionPatternOverridesOnlyRightSectionButtons() {
+        let engine = PatternEngine()
+        engine.surfacePattern = SurfaceOffPattern()
+        engine.rightSectionPattern = FullSurfaceSurfacePattern()
+
+        var emitted: SurfaceFrame?
+        engine.onSurfaceFrame = { emitted = $0 }
+        engine.tick(elapsed: 0, beat: .idle, components: .surface)
+
+        guard let frame = emitted else { return XCTFail("no surface frame emitted") }
+
+        for note in XTouchSurfaceProtocol.rightSectionButtonNotes {
+            XCTAssertNotEqual(frame[buttonNote: note], .off, "right-section note \(note) should be lit")
+        }
+        for note in XTouchSurfaceProtocol.channelStripZones.flatMap({ $0.notes }) {
+            XCTAssertEqual(frame[buttonNote: note], .off, "channel-strip note \(note) must follow the channel-strip pattern")
+        }
+        XCTAssertEqual(frame.rings, SurfaceFrame.allOff.rings, "rings belong to the channel-strip pattern")
+        XCTAssertEqual(frame.scribbleColors, SurfaceFrame.allOff.scribbleColors)
+        XCTAssertEqual(frame.scribbleTexts, SurfaceFrame.allOff.scribbleTexts)
+    }
+
+    /// The mirror image: the right section can go dark without touching the fader show.
+    func testChannelStripSurvivesWhenRightSectionIsOff() {
+        let engine = PatternEngine()
+        engine.surfacePattern = FullSurfaceSurfacePattern()
+        engine.rightSectionPattern = SurfaceOffPattern()
+
+        var emitted: SurfaceFrame?
+        engine.onSurfaceFrame = { emitted = $0 }
+        engine.tick(elapsed: 0, beat: .idle, components: .surface)
+
+        guard let frame = emitted else { return XCTFail("no surface frame emitted") }
+
+        for note in XTouchSurfaceProtocol.rightSectionButtonNotes {
+            XCTAssertEqual(frame[buttonNote: note], .off, "right-section note \(note) should be dark")
+        }
+        for note in XTouchSurfaceProtocol.channelStripZones.flatMap({ $0.notes }) {
+            XCTAssertNotEqual(frame[buttonNote: note], .off, "channel-strip note \(note) should still be lit")
+        }
+        // Full Surface's rings/scribble output survives the splice untouched.
+        XCTAssertTrue(frame.rings.allSatisfy { $0.position == 11 })
+        XCTAssertTrue(frame.scribbleColors.allSatisfy { $0 == .white })
+    }
+
+    func testRightSectionDefaultsToFollowingTheFaders() {
+        let engine = PatternEngine()
+        XCTAssertEqual(type(of: engine.rightSectionPattern).id, FaderMirrorSurfacePattern.id)
+    }
+
+    func testRightSectionPatternReceivesItsOwnParams() {
+        let engine = PatternEngine()
+        engine.surfaceParams = SurfacePatternParams(speed: 1.0, intensity: 1.0)
+        engine.rightSectionParams = SurfacePatternParams(speed: 3.0, intensity: 0.25)
+
+        var received: SurfacePatternParams?
+        engine.rightSectionPattern = ParamRecordingSurfacePattern { received = $0 }
+        engine.tick(elapsed: 0, beat: .idle, components: .surface)
+
+        XCTAssertEqual(received, SurfacePatternParams(speed: 3.0, intensity: 0.25))
+    }
 }
 
 /// Captures the `faders` array it was called with, for asserting `PatternEngine` wires
@@ -172,6 +239,19 @@ private struct RecordingSurfacePattern: SurfacePattern {
 
     func render(elapsed: TimeInterval, beat: BeatClockSnapshot, params: SurfacePatternParams, faders: [Double]) -> SurfaceFrame {
         onRender(faders)
+        return .allOff
+    }
+}
+
+/// Captures the params it was called with, for asserting the right-hand section reads
+/// `rightSectionParams` rather than `surfaceParams`.
+private struct ParamRecordingSurfacePattern: SurfacePattern {
+    static let id = "paramRecording"
+    static let displayName = "Param Recording"
+    let onRender: (SurfacePatternParams) -> Void
+
+    func render(elapsed: TimeInterval, beat: BeatClockSnapshot, params: SurfacePatternParams, faders: [Double]) -> SurfaceFrame {
+        onRender(params)
         return .allOff
     }
 }

@@ -15,7 +15,6 @@ final class AppState {
     // MARK: - Defaults (also used by the Reset buttons in the UI)
 
     static let defaultFaderPatternID = WaveFaderPattern.id
-    static let defaultFaderSpeed = 1.0
     static let defaultFaderAmplitude = 1.0
     static let defaultFaderBaseLevel = 0.5
 
@@ -25,8 +24,10 @@ final class AppState {
     static let defaultPadBrightness = 1.0
 
     static let defaultSurfacePatternID = FullSurfaceSurfacePattern.id
-    static let defaultSurfaceSpeed = 1.0
     static let defaultSurfaceIntensity = 1.0
+
+    static let defaultRightSectionPatternID = FaderMirrorSurfacePattern.id
+    static let defaultRightSectionIntensity = 1.0
 
     static let defaultXTouchSpeed = 1.0
 
@@ -39,7 +40,6 @@ final class AppState {
         didSet { applyPadPattern() }
     }
 
-    var faderSpeed = AppState.defaultFaderSpeed { didSet { patternEngine.faderParams.speed = faderSpeed } }
     var faderAmplitude = AppState.defaultFaderAmplitude { didSet { patternEngine.faderParams.amplitude = faderAmplitude } }
     var faderBaseLevel = AppState.defaultFaderBaseLevel { didSet { patternEngine.faderParams.baseLevel = faderBaseLevel } }
 
@@ -50,18 +50,28 @@ final class AppState {
     var surfacePatternID: String = AppState.defaultSurfacePatternID {
         didSet { applySurfacePattern() }
     }
-    var surfaceSpeed = AppState.defaultSurfaceSpeed { didSet { patternEngine.surfaceParams.speed = surfaceSpeed } }
     var surfaceIntensity = AppState.defaultSurfaceIntensity { didSet { patternEngine.surfaceParams.intensity = surfaceIntensity } }
 
-    /// A master control over the X-Touch as a whole: moving it sets both `faderSpeed` and
-    /// `surfaceSpeed` to match. It's a fire-and-forget broadcast, not a live binding — the
-    /// two individual sliders stay independently adjustable afterward, and this value goes
-    /// stale (doesn't track them) until the master is moved again. Launchpad/`padSpeed` is
-    /// untouched; it's a separate physical device.
+    /// The X-Touch's right-hand button cluster (notes 40+), selectable independently of the
+    /// channel-strip light show — same pattern list, its own selection. Defaults to
+    /// "Follow Faders" so it reads as an extension of the fader show.
+    var rightSectionPatternID: String = AppState.defaultRightSectionPatternID {
+        didSet { applyRightSectionPattern() }
+    }
+    var rightSectionIntensity = AppState.defaultRightSectionIntensity {
+        didSet { patternEngine.rightSectionParams.intensity = rightSectionIntensity }
+    }
+
+    /// The single speed control for everything on the X-Touch: fader motion, the
+    /// channel-strip light show, and the right-hand button cluster. There are no per-section
+    /// speed sliders — this writes straight through to all three param structs rather than
+    /// broadcasting into intermediate properties that could drift independently. Launchpad/
+    /// `padSpeed` is untouched; it's a separate physical device with its own card.
     var xTouchSpeed = AppState.defaultXTouchSpeed {
         didSet {
-            faderSpeed = xTouchSpeed
-            surfaceSpeed = xTouchSpeed
+            patternEngine.faderParams.speed = xTouchSpeed
+            patternEngine.surfaceParams.speed = xTouchSpeed
+            patternEngine.rightSectionParams.speed = xTouchSpeed
         }
     }
 
@@ -70,8 +80,8 @@ final class AppState {
     private(set) var midiStartError: String?
     private(set) var audioLoadError: String?
 
-    /// Mirrors exactly what's being sent to the hardware, so the UI can preview both
-    /// patterns on screen even without the X-Touch/Launchpad physically connected.
+    /// Mirrors exactly what's being sent to the hardware, so the UI can preview every
+    /// pattern on screen even without the X-Touch/Launchpad physically connected.
     private(set) var latestFaderValues = [Double](repeating: 0.5, count: XTouchProtocol.faderCount)
     private(set) var latestPadGrid = PixelGrid.allBlack
     private(set) var latestSurfaceFrame = SurfaceFrame.allOff
@@ -142,7 +152,6 @@ final class AppState {
 
     func resetFaderSettings() {
         faderPatternID = AppState.defaultFaderPatternID
-        faderSpeed = AppState.defaultFaderSpeed
         faderAmplitude = AppState.defaultFaderAmplitude
         faderBaseLevel = AppState.defaultFaderBaseLevel
     }
@@ -156,14 +165,29 @@ final class AppState {
 
     func resetSurfaceSettings() {
         surfacePatternID = AppState.defaultSurfacePatternID
-        surfaceSpeed = AppState.defaultSurfaceSpeed
         surfaceIntensity = AppState.defaultSurfaceIntensity
     }
 
-    func resetAll() {
+    func resetRightSectionSettings() {
+        rightSectionPatternID = AppState.defaultRightSectionPatternID
+        rightSectionIntensity = AppState.defaultRightSectionIntensity
+    }
+
+    /// The X-Touch card's Reset button — all three of its sections at once. Deliberately
+    /// does *not* touch `xTouchSpeed`: that slider lives in the transport bar, carries its
+    /// own inline reset, and is covered by Reset Everything.
+    func resetXTouchSettings() {
         resetFaderSettings()
-        resetPadSettings()
         resetSurfaceSettings()
+        resetRightSectionSettings()
+    }
+
+    func resetAll() {
+        resetXTouchSettings()
+        resetPadSettings()
+        // The only path that resets all three X-Touch speeds at once — `didSet` fires on
+        // every assignment in Swift, including a no-op one, so this always re-syncs the
+        // params even if xTouchSpeed was already at its default.
         xTouchSpeed = AppState.defaultXTouchSpeed
         syncToBeat = AppState.defaultSyncToBeat
     }
@@ -221,6 +245,11 @@ final class AppState {
     private func applySurfacePattern() {
         guard let pattern = SurfacePatterns.all.first(where: { type(of: $0).id == surfacePatternID }) else { return }
         patternEngine.surfacePattern = pattern
+    }
+
+    private func applyRightSectionPattern() {
+        guard let pattern = SurfacePatterns.all.first(where: { type(of: $0).id == rightSectionPatternID }) else { return }
+        patternEngine.rightSectionPattern = pattern
     }
 
     // MARK: - Tick loop

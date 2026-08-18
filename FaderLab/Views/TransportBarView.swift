@@ -41,7 +41,7 @@ struct TransportBarView: View {
             Divider()
 
             LabeledSlider(
-                label: "X-Touch Speed (Faders + Light Show)",
+                label: "X-Touch Speed (faders + all lights)",
                 value: $appState.xTouchSpeed,
                 range: 0.1...4,
                 defaultValue: AppState.defaultXTouchSpeed

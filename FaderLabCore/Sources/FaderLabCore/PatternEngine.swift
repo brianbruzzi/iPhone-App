@@ -28,6 +28,18 @@ public final class PatternEngine {
     public var padParams = PadPatternParams()
     public var surfaceParams = SurfacePatternParams()
 
+    /// Drives the X-Touch's right-hand control cluster (notes 40+, see
+    /// `XTouchSurfaceProtocol.rightSectionZones`) independently of the channel-strip show.
+    /// Rendered as its own full frame each tick and then spliced over `surfacePattern`'s
+    /// output — only its *button* states for those notes are kept. The encoder rings and
+    /// scribble strips are physically part of the channel strips, so they always come from
+    /// `surfacePattern` no matter what is selected here.
+    ///
+    /// Defaults to `FaderMirrorSurfacePattern` ("Follow Faders"), which makes the cluster
+    /// read as an extension of the fader show out of the box.
+    public var rightSectionPattern: any SurfacePattern = FaderMirrorSurfacePattern()
+    public var rightSectionParams = SurfacePatternParams()
+
     /// When false, patterns receive `BeatClockSnapshot.idle` instead of the live beat,
     /// so purely time-driven patterns (Wave, Plasma, Rainbow) keep animating for testing
     /// without audio, while beat-linked mechanics go neutral/static.
@@ -84,9 +96,20 @@ public final class PatternEngine {
         }
 
         if components.contains(.surface) {
-            let frame = surfacePattern.render(
+            var frame = surfacePattern.render(
                 elapsed: elapsed, beat: effectiveBeat, params: surfaceParams, faders: lastKnownFaderValues
             )
+            // The right-hand cluster is rendered separately and spliced over the top, so
+            // the two sections are genuinely independent. `surfacePattern`'s own output for
+            // notes 40+ is discarded here — a few wasted array writes in a pure function,
+            // which is the price of every existing SurfacePattern continuing to render a
+            // full frame with zero changes (see the Round 5 density tests).
+            let rightFrame = rightSectionPattern.render(
+                elapsed: elapsed, beat: effectiveBeat, params: rightSectionParams, faders: lastKnownFaderValues
+            )
+            for index in XTouchSurfaceProtocol.rightSectionButtonIndices {
+                frame.buttons[index] = rightFrame.buttons[index]
+            }
             onSurfaceFrame?(frame)
         }
     }

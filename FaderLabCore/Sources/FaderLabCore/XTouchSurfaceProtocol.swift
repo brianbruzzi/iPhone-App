@@ -107,6 +107,33 @@ public enum XTouchSurfaceProtocol {
         animatableButtonNotes.firstIndex(of: note)
     }
 
+    // MARK: - Section split: channel strips vs. the right-hand control cluster
+
+    /// The 5 zones sitting directly above the 8 faders (notes 0...39) — the channel-strip
+    /// section. These, plus the encoder rings and scribble strips, are the "fader show":
+    /// they belong to whichever pattern is driving the channel strips.
+    public static let channelStripZones: [ButtonZone] = [.rec, .solo, .mute, .select, .vpotPress]
+
+    /// The 12 zones making up the X-Touch's right-hand control cluster — every animatable
+    /// button at note 40 and above, i.e. everything that is *not* part of a channel strip.
+    /// This is the seam the UI's "Other Buttons" picker owns: it can follow the fader show
+    /// or run a completely independent pattern (see `PatternEngine.rightSectionPattern`).
+    public static let rightSectionZones: [ButtonZone] = [
+        .assign, .bankNav, .miscToggles, .function, .globalView, .modifier,
+        .automation, .utility, .transport, .cursor, .userSwitch, .indicator
+    ]
+
+    /// Every right-section button note, ascending — 65 of the 105 animatable notes. The
+    /// complement of `channelStripZones`' notes; `XTouchSurfaceProtocolTests` enforces that
+    /// the two partition `animatableButtonNotes` exactly, so adding a zone without
+    /// classifying it fails the build's tests rather than silently going dark.
+    public static let rightSectionButtonNotes: [UInt8] = rightSectionZones.flatMap { $0.notes }.sorted()
+
+    /// `SurfaceFrame.buttons` indices for `rightSectionButtonNotes`, precomputed so the
+    /// per-tick splice in `PatternEngine` is a straight array copy rather than 130 linear
+    /// `firstIndex(of:)` scans.
+    public static let rightSectionButtonIndices: [Int] = rightSectionButtonNotes.compactMap { buttonIndex(forNote: $0) }
+
     // MARK: - Encoder LED rings: Control Change, channel 1
 
     public static let ringCCBase: UInt8 = 48

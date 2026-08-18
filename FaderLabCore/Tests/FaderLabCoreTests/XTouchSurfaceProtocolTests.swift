@@ -56,6 +56,52 @@ final class XTouchSurfaceProtocolTests: XCTestCase {
         XCTAssertNil(XTouchSurfaceProtocol.buttonIndex(forNote: 255))
     }
 
+    // MARK: - Section split (channel strips vs. right-hand cluster)
+
+    func testSectionsPartitionAnimatableButtonNotes() {
+        let right = Set(XTouchSurfaceProtocol.rightSectionButtonNotes)
+        let strip = Set(XTouchSurfaceProtocol.channelStripZones.flatMap { $0.notes })
+
+        XCTAssertTrue(right.isDisjoint(with: strip), "a note must belong to exactly one section")
+        XCTAssertEqual(right.union(strip), Set(XTouchSurfaceProtocol.animatableButtonNotes))
+        XCTAssertEqual(strip.count, 40, "5 channel-strip zones x 8 notes")
+        XCTAssertEqual(right.count, 65, "105 animatable notes - 40 channel-strip notes")
+    }
+
+    /// Guards against a future `ButtonZone` case being added and silently classified into
+    /// neither section — which would leave it permanently dark once the right-hand splice
+    /// starts overwriting everything it does cover.
+    func testEveryZoneBelongsToExactlyOneSection() {
+        let right = Set(XTouchSurfaceProtocol.rightSectionButtonNotes)
+        let strip = Set(XTouchSurfaceProtocol.channelStripZones.flatMap { $0.notes })
+
+        for zone in XTouchSurfaceProtocol.ButtonZone.allCases {
+            let notes = Set(zone.notes)
+            let inRight = notes.isSubset(of: right)
+            let inStrip = notes.isSubset(of: strip)
+            XCTAssertTrue(inRight != inStrip, "\(zone) must belong to exactly one section, in full")
+        }
+    }
+
+    func testRightSectionButtonNotesAreSortedAndAllAtLeast40() {
+        let notes = XTouchSurfaceProtocol.rightSectionButtonNotes
+        XCTAssertEqual(notes, notes.sorted())
+        XCTAssertEqual(Set(notes).count, notes.count)
+        XCTAssertEqual(notes.first, 40)
+        XCTAssertTrue(notes.allSatisfy { $0 >= 40 })
+    }
+
+    func testRightSectionButtonIndicesMatchTheirNotes() {
+        XCTAssertEqual(
+            XTouchSurfaceProtocol.rightSectionButtonIndices,
+            XTouchSurfaceProtocol.rightSectionButtonNotes.map { XTouchSurfaceProtocol.buttonIndex(forNote: $0) ?? -1 }
+        )
+        // The channel strips occupy notes 0...39, which are also frame indices 0...39 (the
+        // note range is contiguous and `animatableButtonNotes` is sorted), so the
+        // right-hand section is exactly the tail of the buttons array.
+        XCTAssertEqual(XTouchSurfaceProtocol.rightSectionButtonIndices, Array(40..<105))
+    }
+
     // MARK: - Encoder LED rings
 
     func testRingValueByteEncoding() {

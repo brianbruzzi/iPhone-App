@@ -143,12 +143,19 @@ public struct ButtonChaseSurfacePattern: SurfacePattern {
 /// The 8-note channel-strip zones (REC, SOLO, V-Pot press, Function, Global View) form a
 /// graduated "ladder" — a strip's fader lights progressively more rungs as it rises — while
 /// SELECT/MUTE keep their original at-the-extremes meaning (bright at nearly-full/nearly-
-/// empty). Zones that don't map 1:1 to a channel strip become simple meter bars scaled to
-/// the average level across all faders. Nothing not currently accented goes fully dark —
-/// it drops to `.blink` — so the whole surface still reads as "alive."
+/// empty). Zones that don't map 1:1 to a channel strip each track one fader's own level
+/// (falling back to the bank average only if there are fewer faders than zones) rather than
+/// a single shared average — with the Wave fader pattern, 9 phase-offset sines average to
+/// an exact constant, which would otherwise leave this whole section frozen once it became
+/// independently selectable as the X-Touch's "Other Buttons" show. Nothing not currently
+/// accented goes fully dark — it drops to `.blink` — so the whole surface still reads as
+/// "alive."
+///
+/// Shown as "Follow Faders" in both the channel-strip and Other Buttons pickers — it is
+/// the default for the latter, where only its notes-40+ output survives the splice.
 public struct FaderMirrorSurfacePattern: SurfacePattern {
     public static let id = "faderMirror"
-    public static let displayName = "Fader Mirror"
+    public static let displayName = "Follow Faders"
 
     public init() {}
 
@@ -185,9 +192,14 @@ public struct FaderMirrorSurfacePattern: SurfacePattern {
         }
 
         let averageLevel: Double = faders.isEmpty ? 0 : min(max(faders.reduce(0, +) / Double(faders.count), 0), 1)
-        for zone in Self.meterZones {
+        for (zoneIndex, zone) in Self.meterZones.enumerated() {
+            // Each meter zone tracks its own fader rather than the bank average — see the
+            // type doc comment for why the average alone isn't enough.
+            let level = zoneIndex < faders.count
+                ? min(max(faders[zoneIndex], 0), 1)
+                : averageLevel
             let notes = zone.notes
-            let litCount = Int((averageLevel * Double(notes.count)).rounded())
+            let litCount = Int((level * Double(notes.count)).rounded())
             for (index, note) in notes.enumerated() {
                 frame[buttonNote: note] = index < litCount ? .solid : .blink
             }

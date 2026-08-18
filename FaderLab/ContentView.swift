@@ -12,8 +12,7 @@ struct ContentView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     LazyVGrid(columns: cardColumns, alignment: .leading, spacing: 20) {
-                        FaderControlView()
-                        SurfaceControlView()
+                        XTouchControlView()
                         LaunchpadControlView()
                     }
 
