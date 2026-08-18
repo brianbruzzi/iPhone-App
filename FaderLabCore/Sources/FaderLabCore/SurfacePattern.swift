@@ -5,10 +5,15 @@ public struct SurfacePatternParams: Equatable, Sendable {
     public var speed: Double
     /// 0...1: how much of the beat/cycle stays lit, or how strongly a pattern reacts.
     public var intensity: Double
+    /// Flips the direction of any pattern that sweeps or fills along a fixed axis (e.g.
+    /// `FaderMirrorSurfacePattern`'s per-channel SELECT/MUTE/SOLO/REC meter). Ignored by
+    /// patterns with no inherent direction.
+    public var reversed: Bool
 
-    public init(speed: Double = 1.0, intensity: Double = 1.0) {
+    public init(speed: Double = 1.0, intensity: Double = 1.0, reversed: Bool = false) {
         self.speed = speed
         self.intensity = intensity
+        self.reversed = reversed
     }
 }
 
@@ -139,17 +144,20 @@ public struct ButtonChaseSurfacePattern: SurfacePattern {
     }
 }
 
-/// Every zone on the surface reflects the live fader levels, like a bank of VU meters.
-/// The 8-note channel-strip zones (REC, SOLO, V-Pot press, Function, Global View) form a
-/// graduated "ladder" — a strip's fader lights progressively more rungs as it rises — while
-/// SELECT/MUTE keep their original at-the-extremes meaning (bright at nearly-full/nearly-
-/// empty). Zones that don't map 1:1 to a channel strip each track one fader's own level
-/// (falling back to the bank average only if there are fewer faders than zones) rather than
-/// a single shared average — with the Wave fader pattern, 9 phase-offset sines average to
-/// an exact constant, which would otherwise leave this whole section frozen once it became
-/// independently selectable as the X-Touch's "Other Buttons" show. Nothing not currently
-/// accented goes fully dark — it drops to `.blink` — so the whole surface still reads as
-/// "alive."
+/// Every zone on the surface reflects the live fader levels, like a bank of VU meters. The
+/// 4 buttons directly above each fader — physically SELECT (nearest the fader), MUTE, SOLO,
+/// REC (farthest) — act as a single 4-rung meter that climbs with the fader, rather than
+/// SELECT/MUTE being independent all-or-nothing thresholds and REC/SOLO being a separate
+/// ladder: that split used to read as buttons "skipping" across a big dead zone in the
+/// middle of the fader's travel. `params.reversed` flips which end fills first. V-Pot press,
+/// Function, and Global View form their own graduated ladder at higher thresholds — a
+/// strip's fader lights progressively more of those rungs as it rises. Zones that don't map
+/// 1:1 to a channel strip each track one fader's own level (falling back to the bank average
+/// only if there are fewer faders than zones) rather than a single shared average — with the
+/// Wave fader pattern, 9 phase-offset sines average to an exact constant, which would
+/// otherwise leave this whole section frozen once it became independently selectable as the
+/// X-Touch's "Other Buttons" show. Nothing not currently accented goes fully dark — it drops
+/// to `.blink` — so the whole surface still reads as "alive."
 ///
 /// Shown as "Follow Faders" in both the channel-strip and Other Buttons pickers — it is
 /// the default for the latter, where only its notes-40+ output survives the splice.
@@ -159,8 +167,11 @@ public struct FaderMirrorSurfacePattern: SurfacePattern {
 
     public init() {}
 
+    /// Nearest-to-farthest from the fader. `reversed` swaps which end lights first.
+    private static let stripMeterZones: [XTouchSurfaceProtocol.ButtonZone] = [.select, .mute, .solo, .rec]
+
     private static let ladderZones: [(zone: XTouchSurfaceProtocol.ButtonZone, threshold: Double)] = [
-        (.rec, 0.2), (.solo, 0.35), (.vpotPress, 0.5), (.function, 0.65), (.globalView, 0.8)
+        (.vpotPress, 0.5), (.function, 0.65), (.globalView, 0.8)
     ]
 
     private static let meterZones: [XTouchSurfaceProtocol.ButtonZone] = [
@@ -169,8 +180,7 @@ public struct FaderMirrorSurfacePattern: SurfacePattern {
 
     public func render(elapsed: TimeInterval, beat: BeatClockSnapshot, params: SurfacePatternParams, faders: [Double]) -> SurfaceFrame {
         var frame = SurfaceFrame.allOff
-        let selectNotes = XTouchSurfaceProtocol.ButtonZone.select.notes
-        let muteNotes = XTouchSurfaceProtocol.ButtonZone.mute.notes
+        let stripMeterOrder = params.reversed ? Array(Self.stripMeterZones.reversed()) : Self.stripMeterZones
 
         for strip in 0..<XTouchSurfaceProtocol.stripCount {
             let level = strip < faders.count ? min(max(faders[strip], 0), 1) : 0
@@ -180,8 +190,10 @@ public struct FaderMirrorSurfacePattern: SurfacePattern {
             let colorRaw: UInt8 = level < 1.0 / 3.0 ? 2 : (level < 2.0 / 3.0 ? 3 : 1) // green, yellow, red
             frame.scribbleColors[strip] = XTouchSurfaceProtocol.ScribbleColor(rawValue: colorRaw) ?? .white
 
-            frame[buttonNote: selectNotes[strip]] = level > 0.85 ? .solid : .blink
-            frame[buttonNote: muteNotes[strip]] = level < 0.15 ? .solid : .blink
+            let litRungs = Int((level * Double(stripMeterOrder.count)).rounded())
+            for (index, zone) in stripMeterOrder.enumerated() {
+                frame[buttonNote: zone.notes[strip]] = index < litRungs ? .solid : .blink
+            }
 
             for rung in Self.ladderZones {
                 let notes = rung.zone.notes

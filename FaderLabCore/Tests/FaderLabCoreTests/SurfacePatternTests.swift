@@ -184,17 +184,40 @@ final class SurfacePatternTests: XCTestCase {
         XCTAssertEqual(frame.rings[7].position, 0)
     }
 
-    func testFaderMirrorLightsSelectAndMuteAtExtremes() {
-        let faders: [Double] = [0.95, 0.05] + Array(repeating: 0.5, count: 7)
-        let frame = FaderMirrorSurfacePattern().render(
-            elapsed: 0, beat: .idle, params: SurfacePatternParams(), faders: faders
-        )
+    /// SELECT/MUTE/SOLO/REC is a single 4-rung meter (nearest-to-farthest from the fader)
+    /// that climbs continuously with the fader — round(level * 4) rungs solid, the rest
+    /// blink. Replaces the old split where SELECT/MUTE were independent extremes-only
+    /// thresholds and REC/SOLO were a separate ladder, which read as "skipping" across a
+    /// large dead zone in the middle of the fader's travel.
+    func testFaderMirrorStripMeterFillsProgressivelyWithLevel() {
+        let faders: [Double] = [0.8] + Array(repeating: 0.5, count: 8) // round(0.8*4) = 3 rungs
+        let frame = FaderMirrorSurfacePattern().render(elapsed: 0, beat: .idle, params: SurfacePatternParams(), faders: faders)
 
         XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.select.notes[0]], .solid)
-        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.mute.notes[1]], .solid)
-        // Not-yet-extreme strips drop to blink, never off.
-        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.select.notes[1]], .blink)
+        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.mute.notes[0]], .solid)
+        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.solo.notes[0]], .solid)
+        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.rec.notes[0]], .blink)
+    }
+
+    func testFaderMirrorStripMeterAtZeroIsAllBlinkNeverOff() {
+        let faders: [Double] = [0.0] + Array(repeating: 0.5, count: 8)
+        let frame = FaderMirrorSurfacePattern().render(elapsed: 0, beat: .idle, params: SurfacePatternParams(), faders: faders)
+
+        for zone in [XTouchSurfaceProtocol.ButtonZone.select, .mute, .solo, .rec] {
+            XCTAssertEqual(frame[buttonNote: zone.notes[0]], .blink, "\(zone) should never go fully off")
+        }
+    }
+
+    func testFaderMirrorStripMeterReversedFlipsFillOrder() {
+        let faders: [Double] = [0.3] + Array(repeating: 0.5, count: 8) // round(0.3*4) = 1 rung
+        let params = SurfacePatternParams(reversed: true)
+        let frame = FaderMirrorSurfacePattern().render(elapsed: 0, beat: .idle, params: params, faders: faders)
+
+        // Reversed order is [rec, solo, mute, select], so the first rung to light is REC.
+        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.rec.notes[0]], .solid)
+        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.solo.notes[0]], .blink)
         XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.mute.notes[0]], .blink)
+        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.select.notes[0]], .blink)
     }
 
     func testFaderMirrorLadderZonesLightProgressivelyWithLevel() {
@@ -202,20 +225,18 @@ final class SurfacePatternTests: XCTestCase {
         let faders: [Double] = [0.9] + Array(repeating: 0.5, count: 8)
         let frame = FaderMirrorSurfacePattern().render(elapsed: 0, beat: .idle, params: SurfacePatternParams(), faders: faders)
 
-        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.rec.notes[0]], .solid)
-        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.solo.notes[0]], .solid)
         XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.vpotPress.notes[0]], .solid)
         XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.function.notes[0]], .solid)
         XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.globalView.notes[0]], .solid)
     }
 
     func testFaderMirrorLadderZoneBelowThresholdIsBlinkNotOff() {
-        // Level 0.3 clears only the lowest rung (.rec at 0.2).
-        let faders: [Double] = [0.3] + Array(repeating: 0.5, count: 8)
+        // Level 0.6 clears only the lowest rung (.vpotPress at 0.5).
+        let faders: [Double] = [0.6] + Array(repeating: 0.5, count: 8)
         let frame = FaderMirrorSurfacePattern().render(elapsed: 0, beat: .idle, params: SurfacePatternParams(), faders: faders)
 
-        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.rec.notes[0]], .solid)
-        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.solo.notes[0]], .blink)
+        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.vpotPress.notes[0]], .solid)
+        XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.function.notes[0]], .blink)
         XCTAssertEqual(frame[buttonNote: XTouchSurfaceProtocol.ButtonZone.globalView.notes[0]], .blink)
     }
 

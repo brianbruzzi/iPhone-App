@@ -25,6 +25,7 @@ final class AppState {
 
     static let defaultSurfacePatternID = FullSurfaceSurfacePattern.id
     static let defaultSurfaceIntensity = 1.0
+    static let defaultSurfaceReversed = false
 
     static let defaultRightSectionPatternID = FaderMirrorSurfacePattern.id
     static let defaultRightSectionIntensity = 1.0
@@ -51,6 +52,9 @@ final class AppState {
         didSet { applySurfacePattern() }
     }
     var surfaceIntensity = AppState.defaultSurfaceIntensity { didSet { patternEngine.surfaceParams.intensity = surfaceIntensity } }
+    /// Flips which end of the SELECT/MUTE/SOLO/REC meter fills first. Only affects
+    /// "Follow Faders" — other channel-strip patterns have no inherent direction.
+    var surfaceReversed = AppState.defaultSurfaceReversed { didSet { patternEngine.surfaceParams.reversed = surfaceReversed } }
 
     /// The X-Touch's right-hand button cluster (notes 40+), selectable independently of the
     /// channel-strip light show — same pattern list, its own selection. Defaults to
@@ -166,6 +170,7 @@ final class AppState {
     func resetSurfaceSettings() {
         surfacePatternID = AppState.defaultSurfacePatternID
         surfaceIntensity = AppState.defaultSurfaceIntensity
+        surfaceReversed = AppState.defaultSurfaceReversed
     }
 
     func resetRightSectionSettings() {

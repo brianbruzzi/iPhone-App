@@ -45,6 +45,9 @@ struct XTouchControlView: View {
                 label: "Channel Strip Intensity", value: $appState.surfaceIntensity,
                 range: 0...1, defaultValue: AppState.defaultSurfaceIntensity
             )
+            Toggle("Reverse SELECT/MUTE/SOLO/REC meter", isOn: $appState.surfaceReversed)
+                .toggleStyle(.switch)
+                .font(.caption)
 
             Picker("Other Buttons", selection: $appState.rightSectionPatternID) {
                 ForEach(PatternOptions.surface) { option in
