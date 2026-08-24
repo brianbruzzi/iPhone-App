@@ -66,30 +66,13 @@ struct AudioControlView: View {
                     .help(appState.audioEngine.isLooping ? "Looping — click to play once" : "Play once — click to loop")
                 }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("\(formattedTime(appState.audioEngine.elapsedSeconds)) / \(formattedTime(appState.audioEngine.trackDuration))")
-                        .monospacedDigit()
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    // Custom capsule rather than ProgressView: no indeterminate spinner
-                    // when no track is loaded (duration 0), exact height, accent tint.
-                    Capsule().fill(Color.white.opacity(0.10))
-                        .frame(width: 170, height: 3)
-                        .overlay(alignment: .leading) {
-                            Capsule().fill(Color.accentColor)
-                                .frame(width: 170 * progressFraction, height: 3)
-                        }
-                }
+                // Fast-updating readouts live in their own observing leaf views so
+                // their updates never re-measure this whole row — see LivePreviews.swift.
+                LiveTrackTimeReadout()
 
                 Divider().frame(height: 20)
 
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("\(Int(appState.audioEngine.currentBPM.rounded())) BPM")
-                        .monospacedDigit()
-                    Text(isBeatLive ? "Live" : "Free-running")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                LiveBPMReadout()
 
                 HStack(spacing: 4) {
                     Text("Manual BPM").font(.caption)
@@ -116,22 +99,6 @@ struct AudioControlView: View {
                 Text(error).font(.caption).foregroundStyle(.red)
             }
         }
-    }
-
-    private var progressFraction: CGFloat {
-        let duration = appState.audioEngine.trackDuration
-        guard duration > 0 else { return 0 }
-        return CGFloat(min(max(appState.audioEngine.elapsedSeconds / duration, 0), 1))
-    }
-
-    private var isBeatLive: Bool {
-        appState.audioEngine.beatClock.snapshot(now: appState.audioEngine.currentHostTimeSeconds()).isLive
-    }
-
-    private func formattedTime(_ seconds: TimeInterval) -> String {
-        guard seconds.isFinite, seconds >= 0 else { return "0:00" }
-        let total = Int(seconds)
-        return String(format: "%d:%02d", total / 60, total % 60)
     }
 }
 

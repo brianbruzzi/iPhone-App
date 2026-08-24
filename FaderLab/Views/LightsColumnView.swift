@@ -16,7 +16,7 @@ struct LightsColumnView: View {
             // merged frame the hardware receives, right-hand splice included.
             HStack {
                 Spacer(minLength: 0)
-                SurfacePreviewView(frame: appState.latestSurfaceFrame, scale: 1.3)
+                LiveSurfacePreview(scale: 1.3)
                 Spacer(minLength: 0)
             }
 

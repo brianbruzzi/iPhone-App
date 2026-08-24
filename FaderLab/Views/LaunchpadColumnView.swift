@@ -11,7 +11,7 @@ struct LaunchpadColumnView: View {
         PreviewCard(title: "Launchpad", onReset: { appState.resetPadSettings() }) {
             HStack {
                 Spacer(minLength: 0)
-                PixelGridPreviewView(grid: appState.latestPadGrid)
+                LivePixelGrid()
                     // The cap is load-bearing: uncapped, the width-driven grid fills the
                     // whole column and blows the no-scroll height budget.
                     .frame(maxWidth: 420)

@@ -147,6 +147,16 @@ final class AppState {
     private var tickCount = 0
     private var tapTracker = TapTempoTracker()
 
+    /// UI-publish throttle. MIDI must go out at the full rate (60Hz faders — that IS the
+    /// Round 3 fader-buzz fix), but the on-screen previews don't need to repaint that
+    /// fast, and publishing @Observable state at 60Hz re-runs every observing view body
+    /// and its layout on the main thread — the same thread the MIDI tick timer lives on.
+    /// Under the Round 7 full-window UI that layout load starved the timer, ticks
+    /// coalesced, and the motors got bursty targets: audible buzz, visibly vibrating
+    /// faders. So the hardware gets every frame; the UI gets every Nth.
+    @ObservationIgnored private var publishFaderPreviewThisTick = false
+    @ObservationIgnored private var publishPadPreviewThisTick = false
+
     /// Persistence bookkeeping — see Persistence.swift. `isLoadingSettings` suppresses the
     /// per-didSet saves while `loadPersistedSettings()` is itself assigning properties.
     var hasLoadedSettings = false
@@ -304,6 +314,9 @@ final class AppState {
 
         patternEngine.onFaderFrame = { [weak self] values in
             guard let self else { return }
+            // Hardware first, always — motor smoothness depends on every 60Hz frame.
+            self.sendFaderFrame(values)
+            guard self.publishFaderPreviewThisTick else { return }
             // NaN means "no automation this tick" (touched/manual-off) — keep showing the
             // last known position for that fader rather than propagating NaN into the UI.
             var display = self.latestFaderValues
@@ -311,15 +324,20 @@ final class AppState {
                 display[index] = value
             }
             self.latestFaderValues = display
-            self.sendFaderFrame(values)
         }
         patternEngine.onPadFrame = { [weak self] grid in
-            self?.latestPadGrid = grid
-            self?.sendPadFrame(grid)
+            guard let self else { return }
+            self.sendPadFrame(grid)
+            if self.publishPadPreviewThisTick {
+                self.latestPadGrid = grid
+            }
         }
         patternEngine.onSurfaceFrame = { [weak self] frame in
-            self?.latestSurfaceFrame = frame
-            self?.sendSurfaceFrame(frame)
+            guard let self else { return }
+            self.sendSurfaceFrame(frame)
+            if self.publishPadPreviewThisTick {
+                self.latestSurfaceFrame = frame
+            }
         }
     }
 
@@ -370,6 +388,10 @@ final class AppState {
         if tickCount.isMultiple(of: 2) {
             components.formUnion([.pads, .surface])
         }
+        // Preview repaint rates: fader bars at 20Hz, pad/surface previews at 15Hz (every
+        // other of their 30Hz frames). The MIDI sends in the callbacks above ignore these.
+        publishFaderPreviewThisTick = tickCount.isMultiple(of: 3)
+        publishPadPreviewThisTick = tickCount.isMultiple(of: 4)
         tickCount += 1
 
         patternEngine.padParams.audioLevel = audioEngine.currentAudioLevel
@@ -385,7 +407,11 @@ final class AppState {
             sendVUFrameIfNeeded()
         }
 
-        audioEngine.refreshElapsedTime()
+        // Position readout is UI-only — refresh it at the preview rate, not 60Hz, so the
+        // observing transport row doesn't re-layout every tick.
+        if publishFaderPreviewThisTick {
+            audioEngine.refreshElapsedTime()
+        }
     }
 
     private func sendVUFrameIfNeeded() {

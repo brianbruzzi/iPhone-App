@@ -13,7 +13,7 @@ struct FadersColumnView: View {
             appState.vuMeterSource = AppState.defaultVUMeterSource
             appState.displayText = AppState.defaultDisplayText
         }) {
-            FaderBarsPreviewView(values: appState.latestFaderValues, barHeight: 280)
+            LiveFaderBars(barHeight: 280)
 
             Picker("Motion", selection: $appState.faderPatternID) {
                 ForEach(PatternOptions.faders) { option in
