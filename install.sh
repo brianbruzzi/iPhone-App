@@ -35,8 +35,24 @@ if ! curl -fL --retry 3 --retry-delay 2 -o "$TMP/$ASSET" "$URL"; then
     exit 1
 fi
 
-# Quit a running copy so we're not replacing the bundle out from under it.
+# Quit EVERY running copy so we're not replacing the bundle out from under one — and so
+# the freshly installed app doesn't end up running alongside a survivor. Two instances
+# both driving the fader motors at 60Hz from different clocks makes the hardware buzz
+# violently (this happened: a stray instance launched from a since-deleted build folder
+# ignored the polite AppleScript quit, which addresses the app by name and can miss
+# instances running from other paths). So: ask nicely, then kill by process name, then
+# verify nothing is left before touching the bundle.
 osascript -e 'quit app "FaderLab"' >/dev/null 2>&1 || true
+sleep 1
+pkill -x FaderLab >/dev/null 2>&1 || true
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  pgrep -x FaderLab >/dev/null 2>&1 || break
+  sleep 0.5
+done
+if pgrep -x FaderLab >/dev/null 2>&1; then
+  echo "WARNING: a FaderLab instance would not quit; continuing, but if the faders act up," >&2
+  echo "         quit every FaderLab window and relaunch from ~/Applications." >&2
+fi
 
 echo "==> Installing to $DEST ..."
 mkdir -p "$DEST"

@@ -19,12 +19,19 @@ fi
 
 echo "Installing FaderLab from: $SOURCE_APP"
 
-# Quit any running copy so the binary isn't busy while we replace it.
+# Quit EVERY running copy so the binary isn't busy while we replace it — and so the new
+# app doesn't end up running alongside a survivor (two instances both driving the fader
+# motors makes the hardware buzz violently). Ask nicely, then kill by process name, then
+# wait until none remain.
 if pgrep -x FaderLab >/dev/null 2>&1; then
   echo "Quitting the running copy of FaderLab..."
   osascript -e 'tell application "FaderLab" to quit' >/dev/null 2>&1 || true
   sleep 1
   pkill -x FaderLab >/dev/null 2>&1 || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    pgrep -x FaderLab >/dev/null 2>&1 || break
+    sleep 0.5
+  done
 fi
 
 mkdir -p "$DEST_DIR"
