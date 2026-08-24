@@ -56,6 +56,47 @@ public struct Grid8x8<Element: Equatable>: Equatable {
             }
         }
     }
+
+    /// Rotates the whole grid by a multiple of 90 degrees. Applied to a pattern's finished
+    /// output, not to its inputs — a "gravity" pattern like Ember Fire or VU Columns has no
+    /// idea it's been rotated, it just renders exactly as always, and rotating the result
+    /// afterward carries its authored "bottom" along to whichever physical edge the user has
+    /// designated as down. See `PatternEngine.padRotation`.
+    public func rotated(_ rotation: GridRotation) -> Grid8x8<Element> {
+        let n = Grid8x8.size
+        switch rotation {
+        case .degrees0:
+            return self
+        case .degrees90:
+            return Grid8x8(flatStorage: (0..<(n * n)).map { i in
+                let x = i % n, y = i / n
+                return self[y, n - 1 - x]
+            })
+        case .degrees180:
+            return Grid8x8(flatStorage: (0..<(n * n)).map { i in
+                let x = i % n, y = i / n
+                return self[n - 1 - x, n - 1 - y]
+            })
+        case .degrees270:
+            return Grid8x8(flatStorage: (0..<(n * n)).map { i in
+                let x = i % n, y = i / n
+                return self[n - 1 - y, x]
+            })
+        }
+    }
+}
+
+/// A rotation applied to a full `Grid8x8` frame before it reaches the hardware or the
+/// on-screen preview, so any physical edge of the Launchpad can be designated as "down"
+/// without any individual pattern needing to know about orientation. `.degrees90` and
+/// `.degrees270` are opposite rotation directions — since the same rotated grid also drives
+/// the live on-screen preview, the right one for a given physical orientation is whichever
+/// visually matches the hardware, not something to reason out from the case name alone.
+public enum GridRotation: CaseIterable, Equatable, Hashable, Sendable {
+    case degrees0
+    case degrees90
+    case degrees180
+    case degrees270
 }
 
 /// The canonical pixel-art frame type: an 8x8 grid of colors ready to send to the Launchpad.

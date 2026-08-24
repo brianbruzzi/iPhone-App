@@ -1,4 +1,5 @@
 import SwiftUI
+import FaderLabCore
 
 struct LaunchpadControlView: View {
     @Environment(AppState.self) private var appState
@@ -18,6 +19,12 @@ struct LaunchpadControlView: View {
             LabeledSlider(label: "Speed", value: $appState.padSpeed, range: 0.1...4, defaultValue: AppState.defaultPadSpeed)
             LabeledSlider(label: "Hue Shift", value: $appState.padHueShift, range: 0...1, defaultValue: AppState.defaultPadHueShift)
             LabeledSlider(label: "Brightness", value: $appState.padBrightness, range: 0...1, defaultValue: AppState.defaultPadBrightness)
+
+            Picker("Rotation", selection: $appState.padRotation) {
+                ForEach(GridRotation.allCases, id: \.self) { rotation in
+                    Text(rotation.displayName).tag(rotation)
+                }
+            }
         }
     }
 }

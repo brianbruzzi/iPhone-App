@@ -41,6 +41,7 @@ final class AppState {
     static let defaultPadSpeed = 1.0
     static let defaultPadHueShift = 0.0
     static let defaultPadBrightness = 1.0
+    static let defaultPadRotation = GridRotation.degrees0
 
     static let defaultSurfacePatternID = FullSurfaceSurfacePattern.id
     static let defaultSurfaceIntensity = 1.0
@@ -69,6 +70,9 @@ final class AppState {
     var padSpeed = AppState.defaultPadSpeed { didSet { patternEngine.padParams.speed = padSpeed } }
     var padHueShift = AppState.defaultPadHueShift { didSet { patternEngine.padParams.hueShift = padHueShift } }
     var padBrightness = AppState.defaultPadBrightness { didSet { patternEngine.padParams.brightness = padBrightness } }
+    /// Which physical edge of the Launchpad every pattern treats as "down." Rotates the
+    /// finished frame, not the pattern itself — see `PatternEngine.padRotation`.
+    var padRotation = AppState.defaultPadRotation { didSet { patternEngine.padRotation = padRotation } }
 
     var surfacePatternID: String = AppState.defaultSurfacePatternID {
         didSet { applySurfacePattern() }
@@ -208,6 +212,7 @@ final class AppState {
         padSpeed = AppState.defaultPadSpeed
         padHueShift = AppState.defaultPadHueShift
         padBrightness = AppState.defaultPadBrightness
+        padRotation = AppState.defaultPadRotation
     }
 
     func resetSurfaceSettings() {

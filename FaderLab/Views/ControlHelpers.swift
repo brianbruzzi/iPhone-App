@@ -20,6 +20,22 @@ enum PatternOptions {
     }
 }
 
+/// UI label for each rotation, phrased as a turn direction rather than just a bare degree
+/// count — the direction itself is exact (a standard clockwise image rotation), but which
+/// physical Launchpad edge it lands "down" on depends on how the hardware itself has been
+/// turned, which is why `LaunchpadControlView` puts the live preview right above this
+/// picker: whichever option visually matches the hardware is the right one.
+extension GridRotation {
+    var displayName: String {
+        switch self {
+        case .degrees0: return "None"
+        case .degrees90: return "90° Clockwise"
+        case .degrees180: return "180°"
+        case .degrees270: return "90° Counterclockwise"
+        }
+    }
+}
+
 /// A slider with a label, live numeric readout, a tick mark showing where the default
 /// value sits on the track, and a reset button that appears whenever the value has
 /// drifted from that default. Shared by the fader/pad control panels.

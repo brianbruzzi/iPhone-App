@@ -28,6 +28,13 @@ public final class PatternEngine {
     public var padParams = PadPatternParams()
     public var surfaceParams = SurfacePatternParams()
 
+    /// Rotates every pad pattern's finished output before it's emitted, so any physical
+    /// edge of the Launchpad can be the "bottom" a gravity-style pattern (Ember Fire, VU
+    /// Columns, Bouncing Ball's floor) renders toward, without any pattern needing to know
+    /// about orientation. Applied once, here, so the on-screen preview and the hardware
+    /// send both see the identical rotated frame — see `AppState.wireCallbacks`.
+    public var padRotation: GridRotation = .degrees0
+
     /// Drives the X-Touch's right-hand control cluster (notes 40+, see
     /// `XTouchSurfaceProtocol.rightSectionZones`) independently of the channel-strip show.
     /// Rendered as its own full frame each tick and then spliced over `surfacePattern`'s
@@ -92,7 +99,7 @@ public final class PatternEngine {
 
         if components.contains(.pads) {
             let grid = padPattern.render(elapsed: elapsed, beat: effectiveBeat, params: padParams)
-            onPadFrame?(grid)
+            onPadFrame?(grid.rotated(padRotation))
         }
 
         if components.contains(.surface) {

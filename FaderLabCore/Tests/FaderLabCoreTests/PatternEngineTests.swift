@@ -24,6 +24,19 @@ private struct BeatIndexColorPadPattern: PadPattern {
     }
 }
 
+/// A pad pattern that lights exactly one corner pad, rest black — for tracking where a
+/// single point lands after `PatternEngine.padRotation` is applied.
+private struct CornerMarkedPadPattern: PadPattern {
+    static let id = "cornerMarked"
+    static let displayName = "Corner Marked"
+
+    func render(elapsed: TimeInterval, beat: BeatClockSnapshot, params: PadPatternParams) -> PixelGrid {
+        var grid = PixelGrid.allBlack
+        grid[0, 0] = .white
+        return grid
+    }
+}
+
 final class PatternEngineTests: XCTestCase {
 
     func testTouchedFadersAreSkippedWithNaN() {
@@ -83,6 +96,30 @@ final class PatternEngineTests: XCTestCase {
 
         XCTAssertEqual(faderCalls, 2)
         XCTAssertEqual(padCalls, 2)
+    }
+
+    // MARK: - Pad rotation
+
+    func testDefaultPadRotationLeavesTheGridUnchanged() {
+        let engine = PatternEngine(faderPattern: WaveFaderPattern(), padPattern: CornerMarkedPadPattern())
+        var emitted: PixelGrid?
+        engine.onPadFrame = { emitted = $0 }
+        engine.tick(elapsed: 0, beat: .idle, components: .pads)
+
+        XCTAssertEqual(emitted?[0, 0], .white)
+        XCTAssertEqual(emitted?[7, 0], .black)
+    }
+
+    func testPadRotationIsAppliedToTheEmittedGrid() {
+        let engine = PatternEngine(faderPattern: WaveFaderPattern(), padPattern: CornerMarkedPadPattern())
+        engine.padRotation = .degrees90
+        var emitted: PixelGrid?
+        engine.onPadFrame = { emitted = $0 }
+        engine.tick(elapsed: 0, beat: .idle, components: .pads)
+
+        // A 90 degree rotation carries the top-left corner to the top-right.
+        XCTAssertEqual(emitted?[7, 0], .white)
+        XCTAssertEqual(emitted?[0, 0], .black)
     }
 
     // MARK: - TickComponents
