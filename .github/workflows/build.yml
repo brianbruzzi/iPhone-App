@@ -1,0 +1,100 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-test:
+    name: Test core package, build app
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Run FaderLabCore tests
+        run: |
+          cd FaderLabCore
+          swift test
+
+      - name: Build FaderLab.app (unsigned, for local testing)
+        run: |
+          xcodebuild \
+            -project FaderLab.xcodeproj \
+            -scheme FaderLab \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      # Not a Gatekeeper bypass — an ad-hoc signature is not a Developer ID one.
+      # But Apple Silicon requires *some* valid signature to execute, and building
+      # with CODE_SIGNING_ALLOWED=NO leaves the bundle unsealed (no
+      # _CodeSignature/CodeResources), a known source of "app is damaged" and
+      # Killed: 9 failures. Sealing it ad-hoc removes that whole class of problem.
+      - name: Ad-hoc sign the app bundle
+        run: |
+          codesign --force --deep --sign - build/Build/Products/Release/FaderLab.app
+          codesign --verify --verbose build/Build/Products/Release/FaderLab.app
+
+      # The zip is a portable installer: it carries the offline install script alongside
+      # the app, so a USB-stick copy onto an internet-less Mac (on-set use) just needs a
+      # double-click on "Install FaderLab.command" — see README "Installing on another
+      # Mac". Both items sit at the zip root; install.sh depends on finding FaderLab.app
+      # there, so don't add a wrapping folder.
+      - name: Zip the built app (with offline installer)
+        run: |
+          cd build/Build/Products/Release
+          rm -rf zip-staging
+          mkdir zip-staging
+          ditto FaderLab.app zip-staging/FaderLab.app
+          cp "$GITHUB_WORKSPACE/packaging/Install FaderLab.command" zip-staging/
+          ditto -c -k --sequesterRsrc zip-staging FaderLab.zip
+
+      - name: Upload FaderLab.app (per-run artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: FaderLab-app
+          path: build/Build/Products/Release/FaderLab.zip
+          retention-days: 30
+
+      # Only on a direct push (not on the duplicate pull_request-triggered run for the
+      # same commit) — replaces the "latest-build" release so there's always exactly one
+      # stable, bookmarkable URL with the newest version, instead of having to hunt
+      # through individual Actions runs. Release assets are also directly downloadable
+      # without being logged into GitHub, unlike per-run Actions artifacts.
+      - name: Publish "latest build" release
+        if: github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd build/Build/Products/Release
+          gh release delete latest-build --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
+
+          # The GitHub API occasionally returns a transient 5xx here; retry a few times
+          # with backoff rather than failing the whole run over a momentary hiccup.
+          for attempt in 1 2 3 4 5; do
+            if gh release create latest-build FaderLab.zip \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "FaderLab — latest build" \
+              --notes "Automatically rebuilt from the newest commit on \`${{ github.ref_name }}\`. This link always points at the newest version — just re-download from here, no need to hunt through Actions runs." \
+              --prerelease; then
+              exit 0
+            fi
+            echo "Attempt $attempt failed, retrying in $((attempt * 10))s..."
+            sleep $((attempt * 10))
+          done
+          echo "::error::Failed to publish the latest-build release after 5 attempts"
+          exit 1
