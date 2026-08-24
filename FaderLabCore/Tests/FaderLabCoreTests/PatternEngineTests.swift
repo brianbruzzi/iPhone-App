@@ -199,6 +199,40 @@ final class PatternEngineTests: XCTestCase {
         XCTAssertEqual(receivedFaders, Array(repeating: 0.3, count: XTouchProtocol.faderCount))
     }
 
+    // MARK: - External (hand-moved) fader positions
+
+    func testExternalFaderPositionUpdatesLastKnownValues() {
+        let engine = PatternEngine()
+        engine.noteExternalFaderPosition(index: 3, value: 0.8)
+        XCTAssertEqual(engine.lastKnownFaderValues[3], 0.8, accuracy: 1e-9)
+    }
+
+    func testExternalFaderPositionClampsAndRejectsGarbage() {
+        let engine = PatternEngine()
+        engine.noteExternalFaderPosition(index: 0, value: 1.7)
+        XCTAssertEqual(engine.lastKnownFaderValues[0], 1.0, accuracy: 1e-9)
+
+        engine.noteExternalFaderPosition(index: 1, value: .nan)
+        XCTAssertEqual(engine.lastKnownFaderValues[1], 0.5, accuracy: 1e-9, "NaN must be ignored")
+
+        engine.noteExternalFaderPosition(index: 99, value: 0.5) // out of range: must not crash
+    }
+
+    /// The end-to-end reason this API exists: a touched fader emits NaN from the pattern,
+    /// but an external position report keeps the mirror live at the hand's position.
+    func testExternalPositionFeedsSurfacePatternWhileFaderIsTouched() {
+        let engine = PatternEngine(faderPattern: ConstantFaderPattern(value: 0.2), padPattern: PlasmaWavePattern())
+        engine.tick(elapsed: 0, beat: .idle, components: .faders)
+        engine.touchedFaders = [2]
+        engine.noteExternalFaderPosition(index: 2, value: 0.9)
+
+        var receivedFaders: [Double] = []
+        engine.surfacePattern = RecordingSurfacePattern { receivedFaders = $0 }
+        engine.tick(elapsed: 1, beat: .idle, components: [.faders, .surface])
+
+        XCTAssertEqual(receivedFaders[2], 0.9, accuracy: 1e-9, "surface pattern should see the hand position, not the stale pre-touch value")
+    }
+
     // MARK: - Right-hand section splice
 
     /// Channel strip Off + right section Full Surface: only notes 40+ light, and the

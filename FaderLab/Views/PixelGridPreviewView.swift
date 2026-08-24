@@ -21,8 +21,12 @@ struct PixelGridPreviewView: View {
             }
         }
         .padding(8)
-        .background(Color.black)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(Theme.previewWell)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.hairline))
+        // One static ambient glow on the whole well — deliberately NOT per-cell shadows,
+        // which would mean 64 shadow layers re-rendered at 30Hz.
+        .shadow(color: Color.accentColor.opacity(0.12), radius: 24)
     }
 }
 

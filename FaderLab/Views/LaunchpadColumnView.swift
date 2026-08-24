@@ -1,14 +1,23 @@
 import SwiftUI
 import FaderLabCore
 
-struct LaunchpadControlView: View {
+/// Column C: the Launchpad X pixel art — a large square live grid with the pattern
+/// controls beneath it. Separate physical device, so it keeps its own card and speed.
+struct LaunchpadColumnView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
         @Bindable var appState = appState
-        PreviewCard(title: "Pixel Art (Launchpad X)", onReset: { appState.resetPadSettings() }) {
-            PixelGridPreviewView(grid: appState.latestPadGrid)
-                .frame(width: 220, height: 220)
+        PreviewCard(title: "Launchpad", onReset: { appState.resetPadSettings() }) {
+            HStack {
+                Spacer(minLength: 0)
+                PixelGridPreviewView(grid: appState.latestPadGrid)
+                    // The cap is load-bearing: uncapped, the width-driven grid fills the
+                    // whole column and blows the no-scroll height budget.
+                    .frame(maxWidth: 420)
+                    .aspectRatio(1, contentMode: .fit)
+                Spacer(minLength: 0)
+            }
 
             Picker("Pattern", selection: $appState.padPatternID) {
                 ForEach(PatternOptions.pads) { option in
@@ -30,5 +39,5 @@ struct LaunchpadControlView: View {
 }
 
 #Preview {
-    LaunchpadControlView().environment(AppState())
+    LaunchpadColumnView().environment(AppState())
 }

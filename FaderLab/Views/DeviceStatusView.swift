@@ -3,7 +3,13 @@ import CoreMIDI
 
 struct DeviceStatusView: View {
     @Environment(AppState.self) private var appState
-    @State private var isExpanded = false
+    @State private var isExpanded: Bool
+
+    /// `initiallyExpanded` seeds the disclosure state on first appearance — the inspector
+    /// opens this expanded so it shows content, not a collapsed chevron.
+    init(initiallyExpanded: Bool = false) {
+        _isExpanded = State(initialValue: initiallyExpanded)
+    }
 
     private var midi: MIDIManager { appState.midiManager }
 

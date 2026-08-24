@@ -58,38 +58,38 @@ final class AppState {
     static let defaultSyncToBeat = true
 
     var faderPatternID: String = AppState.defaultFaderPatternID {
-        didSet { applyFaderPattern() }
+        didSet { applyFaderPattern(); persistSettings() }
     }
     var padPatternID: String = AppState.defaultPadPatternID {
-        didSet { applyPadPattern() }
+        didSet { applyPadPattern(); persistSettings() }
     }
 
-    var faderAmplitude = AppState.defaultFaderAmplitude { didSet { patternEngine.faderParams.amplitude = faderAmplitude } }
-    var faderBaseLevel = AppState.defaultFaderBaseLevel { didSet { patternEngine.faderParams.baseLevel = faderBaseLevel } }
+    var faderAmplitude = AppState.defaultFaderAmplitude { didSet { patternEngine.faderParams.amplitude = faderAmplitude; persistSettings() } }
+    var faderBaseLevel = AppState.defaultFaderBaseLevel { didSet { patternEngine.faderParams.baseLevel = faderBaseLevel; persistSettings() } }
 
-    var padSpeed = AppState.defaultPadSpeed { didSet { patternEngine.padParams.speed = padSpeed } }
-    var padHueShift = AppState.defaultPadHueShift { didSet { patternEngine.padParams.hueShift = padHueShift } }
-    var padBrightness = AppState.defaultPadBrightness { didSet { patternEngine.padParams.brightness = padBrightness } }
+    var padSpeed = AppState.defaultPadSpeed { didSet { patternEngine.padParams.speed = padSpeed; persistSettings() } }
+    var padHueShift = AppState.defaultPadHueShift { didSet { patternEngine.padParams.hueShift = padHueShift; persistSettings() } }
+    var padBrightness = AppState.defaultPadBrightness { didSet { patternEngine.padParams.brightness = padBrightness; persistSettings() } }
     /// Which physical edge of the Launchpad every pattern treats as "down." Rotates the
     /// finished frame, not the pattern itself — see `PatternEngine.padRotation`.
-    var padRotation = AppState.defaultPadRotation { didSet { patternEngine.padRotation = padRotation } }
+    var padRotation = AppState.defaultPadRotation { didSet { patternEngine.padRotation = padRotation; persistSettings() } }
 
     var surfacePatternID: String = AppState.defaultSurfacePatternID {
-        didSet { applySurfacePattern() }
+        didSet { applySurfacePattern(); persistSettings() }
     }
-    var surfaceIntensity = AppState.defaultSurfaceIntensity { didSet { patternEngine.surfaceParams.intensity = surfaceIntensity } }
+    var surfaceIntensity = AppState.defaultSurfaceIntensity { didSet { patternEngine.surfaceParams.intensity = surfaceIntensity; persistSettings() } }
     /// Flips which end of the SELECT/MUTE/SOLO/REC meter fills first. Only affects
     /// "Follow Faders" — other channel-strip patterns have no inherent direction.
-    var surfaceReversed = AppState.defaultSurfaceReversed { didSet { patternEngine.surfaceParams.reversed = surfaceReversed } }
+    var surfaceReversed = AppState.defaultSurfaceReversed { didSet { patternEngine.surfaceParams.reversed = surfaceReversed; persistSettings() } }
 
     /// The X-Touch's right-hand button cluster (notes 40+), selectable independently of the
     /// channel-strip light show — same pattern list, its own selection. Defaults to
     /// "Follow Faders" so it reads as an extension of the fader show.
     var rightSectionPatternID: String = AppState.defaultRightSectionPatternID {
-        didSet { applyRightSectionPattern() }
+        didSet { applyRightSectionPattern(); persistSettings() }
     }
     var rightSectionIntensity = AppState.defaultRightSectionIntensity {
-        didSet { patternEngine.rightSectionParams.intensity = rightSectionIntensity }
+        didSet { patternEngine.rightSectionParams.intensity = rightSectionIntensity; persistSettings() }
     }
 
     /// The single speed control for everything on the X-Touch: fader motion, the
@@ -102,6 +102,7 @@ final class AppState {
             patternEngine.faderParams.speed = xTouchSpeed
             patternEngine.surfaceParams.speed = xTouchSpeed
             patternEngine.rightSectionParams.speed = xTouchSpeed
+            persistSettings()
         }
     }
 
@@ -111,16 +112,21 @@ final class AppState {
         didSet {
             guard vuMeterSource != oldValue else { return }
             midiManager.sendXTouchVUEnabled(vuMeterSource != .off)
+            persistSettings()
         }
     }
 
     /// Text shown on the X-Touch's 12-digit 7-segment display. Being 7-segment, some
     /// letters (M, W, K, V, X) only render as rough approximations.
     var displayText = AppState.defaultDisplayText {
-        didSet { midiManager.sendXTouchDisplayText(displayText) }
+        didSet { midiManager.sendXTouchDisplayText(displayText); persistSettings() }
     }
 
-    var syncToBeat = AppState.defaultSyncToBeat { didSet { patternEngine.syncToBeat = syncToBeat } }
+    var syncToBeat = AppState.defaultSyncToBeat { didSet { patternEngine.syncToBeat = syncToBeat; persistSettings() } }
+
+    /// Whether the Setup & Diagnostics inspector is open. Lives here (not view @State) so
+    /// both the status strip button and the Playback menu shortcut can toggle it.
+    var showDiagnostics = false
 
     private(set) var midiStartError: String?
     private(set) var audioLoadError: String?
@@ -139,6 +145,12 @@ final class AppState {
     private var transportClock = TransportClock(startedAt: 0)
     private var tickTimer: DispatchSourceTimer?
     private var tickCount = 0
+    private var tapTracker = TapTempoTracker()
+
+    /// Persistence bookkeeping — see Persistence.swift. `isLoadingSettings` suppresses the
+    /// per-didSet saves while `loadPersistedSettings()` is itself assigning properties.
+    var hasLoadedSettings = false
+    var isLoadingSettings = false
 
     /// 60Hz overall so faders (ticked every call) update smoothly; pads and the X-Touch
     /// surface only need every other tick (~30Hz) — see `tick()`.
@@ -151,6 +163,11 @@ final class AppState {
     // MARK: - Lifecycle
 
     func start() {
+        // Must happen in a method, never in init: property assignments inside init don't
+        // fire didSet, which is the mechanism that pushes every loaded value into the
+        // pattern engine and MIDI layer.
+        loadPersistedSettings()
+
         do {
             try midiManager.start()
             midiStartError = nil
@@ -197,6 +214,21 @@ final class AppState {
             transportClock.pause(at: now)
         }
         isPatternPaused.toggle()
+    }
+
+    /// One press of the Tap button: feeds the shared tracker and, once it has a stable
+    /// estimate, sets the beat clock to the tapped tempo.
+    func tapTempo() {
+        if let bpm = tapTracker.registerTap(at: audioEngine.currentHostTimeSeconds()) {
+            audioEngine.setManualBPM(bpm)
+        }
+    }
+
+    /// Loop toggling goes through here (not directly through `audioEngine.isLooping`) so
+    /// the choice persists across launches like every other setting.
+    func toggleLooping() {
+        audioEngine.isLooping.toggle()
+        persistSettings()
     }
 
     // MARK: - Reset to defaults
@@ -264,6 +296,10 @@ final class AppState {
         midiManager.onXTouchFaderPositionReport = { [weak self] index, unitValue in
             guard let self, self.latestFaderValues.indices.contains(index) else { return }
             self.latestFaderValues[index] = unitValue
+            // Also feed the pattern engine, so "Follow Faders" lights and VU meters mirror
+            // a hand-moved fader live instead of freezing at its pre-touch position (the
+            // pattern emits NaN for touched faders — see PatternEngine).
+            self.patternEngine.noteExternalFaderPosition(index: index, value: unitValue)
         }
 
         patternEngine.onFaderFrame = { [weak self] values in

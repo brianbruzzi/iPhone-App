@@ -48,10 +48,19 @@ jobs:
           codesign --force --deep --sign - build/Build/Products/Release/FaderLab.app
           codesign --verify --verbose build/Build/Products/Release/FaderLab.app
 
-      - name: Zip the built app
+      # The zip is a portable installer: it carries the offline install script alongside
+      # the app, so a USB-stick copy onto an internet-less Mac (on-set use) just needs a
+      # double-click on "Install FaderLab.command" — see README "Installing on another
+      # Mac". Both items sit at the zip root; install.sh depends on finding FaderLab.app
+      # there, so don't add a wrapping folder.
+      - name: Zip the built app (with offline installer)
         run: |
           cd build/Build/Products/Release
-          ditto -c -k --sequesterRsrc --keepParent FaderLab.app FaderLab.zip
+          rm -rf zip-staging
+          mkdir zip-staging
+          ditto FaderLab.app zip-staging/FaderLab.app
+          cp "$GITHUB_WORKSPACE/packaging/Install FaderLab.command" zip-staging/
+          ditto -c -k --sequesterRsrc zip-staging FaderLab.zip
 
       - name: Upload FaderLab.app (per-run artifact)
         uses: actions/upload-artifact@v4

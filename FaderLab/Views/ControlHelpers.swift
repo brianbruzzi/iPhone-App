@@ -75,7 +75,7 @@ struct LabeledSlider: View {
                 GeometryReader { proxy in
                     let fraction = (defaultValue - range.lowerBound) / (range.upperBound - range.lowerBound)
                     Rectangle()
-                        .fill(Color.secondary.opacity(0.6))
+                        .fill(Color.white.opacity(0.35))
                         .frame(width: 1.5, height: 5)
                         .offset(x: proxy.size.width * CGFloat(fraction))
                 }

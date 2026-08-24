@@ -50,6 +50,30 @@ xattr -dr com.apple.quarantine ~/Downloads/FaderLab.app
 ...or go to **System Settings → Privacy & Security**, scroll down, and click **Open
 Anyway**. The installer script above exists specifically to avoid this dance.
 
+### Installing on another Mac (no internet — e.g. on set)
+
+The app is fully self-contained and never needs internet to run: audio comes from local
+files, MIDI from the connected hardware. Requirements: **macOS 14 or newer**, Apple
+Silicon or Intel (the build is universal).
+
+1. On any Mac that *is* online, **[download FaderLab.zip](../../releases/download/latest-build/FaderLab.zip)**
+   and copy it to a USB stick.
+2. On the target Mac: copy the zip over, double-click it to unzip. The folder contains
+   `FaderLab.app` and `Install FaderLab.command`.
+3. Double-click **`Install FaderLab.command`**. It copies the app to `~/Applications`,
+   clears the Gatekeeper quarantine flag, and launches it. Done.
+
+If macOS refuses to open the `.command` file itself ("unidentified developer"), open
+Terminal and run it through `bash`, which sidesteps that check:
+
+```bash
+bash ~/Downloads/"Install FaderLab.command"
+```
+
+(Adjust the path to wherever you unzipped. Running a script through `bash` executes it
+without the double-click Gatekeeper check — same trust tradeoff as the curl installer
+above.)
+
 ### Then
 
 Pick a fader pattern and a pixel-art pattern from the dropdowns, drag the sliders, and load

@@ -7,8 +7,14 @@ import FaderLabCore
 /// aren't moving, this is what turns "nothing works" into a specific answer.
 struct DiagnosticsView: View {
     @Environment(AppState.self) private var appState
-    @State private var isExpanded = false
+    @State private var isExpanded: Bool
     @State private var testLEDOn = false
+
+    /// `initiallyExpanded` seeds the disclosure state on first appearance — the inspector
+    /// opens this expanded so it shows content, not a collapsed chevron.
+    init(initiallyExpanded: Bool = false) {
+        _isExpanded = State(initialValue: initiallyExpanded)
+    }
 
     private var midi: MIDIManager { appState.midiManager }
 
@@ -242,7 +248,7 @@ struct DiagnosticsView: View {
                     .padding(6)
                 }
                 .frame(height: 160)
-                .background(Color.black.opacity(0.05))
+                .background(Color.white.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .onChange(of: midi.monitor.entries.count) {
                     if let last = midi.monitor.entries.last {

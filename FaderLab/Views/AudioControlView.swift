@@ -1,9 +1,10 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// A horizontal transport cluster — file picker, play/pause, elapsed time, live BPM, and
-/// manual BPM entry all in one row — meant to sit in the fixed `TransportBarView` at the
-/// top of the window rather than scroll away with the pattern cards below it.
+/// The audio cluster of the transport bar: file picker, transport buttons, current
+/// position over the track length with a thin progress bar, live BPM, and manual/tap
+/// tempo — one row, designed to sit between the show and sync clusters in
+/// `TransportBarView`.
 struct AudioControlView: View {
     @Environment(AppState.self) private var appState
     @State private var manualBPMText = "120"
@@ -57,7 +58,7 @@ struct AudioControlView: View {
                     .help("Stop and reset to the beginning")
 
                     Button {
-                        appState.audioEngine.isLooping.toggle()
+                        appState.toggleLooping()
                     } label: {
                         Image(systemName: "repeat")
                             .foregroundStyle(appState.audioEngine.isLooping ? Color.accentColor : Color.secondary)
@@ -65,9 +66,20 @@ struct AudioControlView: View {
                     .help(appState.audioEngine.isLooping ? "Looping — click to play once" : "Play once — click to loop")
                 }
 
-                Text(formattedTime(appState.audioEngine.elapsedSeconds))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(formattedTime(appState.audioEngine.elapsedSeconds)) / \(formattedTime(appState.audioEngine.trackDuration))")
+                        .monospacedDigit()
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    // Custom capsule rather than ProgressView: no indeterminate spinner
+                    // when no track is loaded (duration 0), exact height, accent tint.
+                    Capsule().fill(Color.white.opacity(0.10))
+                        .frame(width: 170, height: 3)
+                        .overlay(alignment: .leading) {
+                            Capsule().fill(Color.accentColor)
+                                .frame(width: 170 * progressFraction, height: 3)
+                        }
+                }
 
                 Divider().frame(height: 20)
 
@@ -90,6 +102,11 @@ struct AudioControlView: View {
                         }
                     }
                     .buttonStyle(.borderless)
+                    Button("Tap") {
+                        appState.tapTempo()
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Tap along with the music to set the tempo by feel")
                 }
 
                 Spacer(minLength: 0)
@@ -99,6 +116,12 @@ struct AudioControlView: View {
                 Text(error).font(.caption).foregroundStyle(.red)
             }
         }
+    }
+
+    private var progressFraction: CGFloat {
+        let duration = appState.audioEngine.trackDuration
+        guard duration > 0 else { return 0 }
+        return CGFloat(min(max(appState.audioEngine.elapsedSeconds / duration, 0), 1))
     }
 
     private var isBeatLive: Bool {

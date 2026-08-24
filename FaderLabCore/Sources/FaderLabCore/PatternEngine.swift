@@ -121,6 +121,16 @@ public final class PatternEngine {
         }
     }
 
+    /// Records a fader position reported by the hardware itself (the user's hand moving a
+    /// fader). While a fader is touched, the pattern emits `.nan` for it and
+    /// `lastKnownFaderValues` would otherwise freeze at the pre-touch value — this is what
+    /// lets "Follow Faders" surface patterns and VU meters mirror a hand-moved fader live.
+    /// Non-finite values and out-of-range indices are ignored; values clamp to 0...1.
+    public func noteExternalFaderPosition(index: Int, value: Double) {
+        guard value.isFinite, lastKnownFaderValues.indices.contains(index) else { return }
+        lastKnownFaderValues[index] = min(max(value, 0), 1)
+    }
+
     private func updateLastKnownFaderValues(from faders: [Double]) {
         if faders.count != lastKnownFaderValues.count {
             lastKnownFaderValues = Array(repeating: 0.5, count: faders.count)
