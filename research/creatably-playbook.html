@@ -1,0 +1,533 @@
+<title>The Creatably Playbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+  :root {
+    --paper: #FCFBF7;
+    --paper-2: #F3F1EA;
+    --ink: #1B1A17;
+    --ink-2: #5E5B53;
+    --rule: #E1DED4;
+    --hl: #F4E84A;
+    --hl-ink: #1B1A17;
+    --pen: #2749A6;
+    --pen-soft: #E8EDF9;
+    --act-1: #F4E84A;
+    --act-2: #1B1A17;
+    --act-3: #2749A6;
+    --act-4: #B9B3A3;
+    --display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+    --body: "Newsreader", Georgia, "Times New Roman", serif;
+    --mono: "Courier Prime", "Courier New", Courier, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #161512;
+      --paper-2: #1F1E1A;
+      --ink: #ECE9E0;
+      --ink-2: #A5A093;
+      --rule: #2F2D28;
+      --hl: #D3C733;
+      --hl-ink: #161512;
+      --pen: #8FA9F2;
+      --pen-soft: #1C2233;
+      --act-1: #D3C733;
+      --act-2: #ECE9E0;
+      --act-3: #8FA9F2;
+      --act-4: #5C584E;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #161512;
+    --paper-2: #1F1E1A;
+    --ink: #ECE9E0;
+    --ink-2: #A5A093;
+    --rule: #2F2D28;
+    --hl: #D3C733;
+    --hl-ink: #161512;
+    --pen: #8FA9F2;
+    --pen-soft: #1C2233;
+    --act-1: #D3C733;
+    --act-2: #ECE9E0;
+    --act-3: #8FA9F2;
+    --act-4: #5C584E;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 18px;
+    line-height: 1.55;
+    padding-inline: 20px;
+    padding-block: 48px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 700px; margin-inline: auto; }
+  p { margin: 0; }
+  a { color: var(--pen); }
+
+  /* ---------- masthead ---------- */
+  .masthead { display: grid; gap: 18px; padding-bottom: 36px; border-bottom: 2px solid var(--ink); }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  h1 {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: clamp(44px, 9vw, 76px);
+    line-height: 0.98;
+    letter-spacing: -0.025em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .dek { font-size: 22px; line-height: 1.4; max-width: 34ch; text-wrap: balance; font-weight: 500; }
+  .legend {
+    display: grid; gap: 8px; margin-top: 8px;
+    font-family: var(--display); font-size: 14.5px; color: var(--ink-2); line-height: 1.4;
+  }
+  .legend span.hl { color: var(--hl-ink); }
+  .legend .pen-tag { color: var(--pen); font-weight: 700; }
+
+  /* ---------- sections ---------- */
+  section { padding-block: 44px; border-bottom: 1px solid var(--rule); }
+  section:last-of-type { border-bottom: 0; }
+  h2 {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: clamp(28px, 5vw, 36px);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    margin: 0 0 8px;
+    text-wrap: balance;
+  }
+  .kicker { font-size: 19px; color: var(--ink-2); margin-bottom: 26px; max-width: 46ch; }
+  .prose { display: grid; gap: 14px; max-width: 64ch; }
+  .prose p { max-width: 64ch; }
+
+  .hl {
+    background: linear-gradient(transparent 12%, var(--hl) 12%, var(--hl) 90%, transparent 90%);
+    color: var(--hl-ink);
+    padding-inline: 2px;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  /* ---------- beat sheet ---------- */
+  .beat { margin: 22px 0 30px; }
+  .beat-head { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--mono); font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
+  .beat-bar { display: grid; grid-template-columns: 20fr 58fr 12fr 10fr; gap: 3px; height: 26px; }
+  .beat-bar div { border-radius: 3px; }
+  .beat-bar .a1 { background: var(--act-1); }
+  .beat-bar .a2 { background: var(--act-2); }
+  .beat-bar .a3 { background: var(--act-3); }
+  .beat-bar .a4 { background: var(--act-4); }
+  .beat-labels { display: grid; grid-template-columns: 20fr 58fr 12fr 10fr; gap: 3px; margin-top: 10px; }
+  .beat-labels div { font-family: var(--display); font-size: 13px; line-height: 1.3; display: grid; gap: 2px; }
+  .beat-labels b { font-weight: 700; }
+  .beat-labels .tc { font-family: var(--mono); color: var(--ink-2); font-size: 12px; }
+  .beat-labels .sw { display: none; }
+  @media (max-width: 560px) {
+    .beat-labels { grid-template-columns: 1fr; gap: 8px; }
+    .beat-labels div { grid-template-columns: 14px 1fr; column-gap: 10px; align-items: start; }
+    .beat-labels .sw { display: block; width: 14px; height: 14px; border-radius: 3px; margin-top: 3px; grid-row: span 2; }
+    .beat-labels .a1 .sw { background: var(--act-1); }
+    .beat-labels .a2 .sw { background: var(--act-2); }
+    .beat-labels .a3 .sw { background: var(--act-3); }
+    .beat-labels .a4 .sw { background: var(--act-4); }
+  }
+  .acts { display: grid; gap: 16px; margin-top: 8px; }
+  .act { display: grid; grid-template-columns: 78px 1fr; gap: 14px; align-items: baseline; }
+  .act .tc { font-family: var(--mono); font-size: 13px; color: var(--ink-2); padding-top: 4px; }
+  .act b { font-family: var(--display); font-weight: 700; }
+  @media (max-width: 480px) { .act { grid-template-columns: 1fr; gap: 2px; } }
+
+  /* ---------- rules ---------- */
+  .rules { display: grid; gap: 52px; }
+  .rule { display: grid; gap: 16px; }
+  .rule-head { display: grid; gap: 4px; }
+  .rule-num { font-family: var(--mono); font-size: 13px; letter-spacing: 0.08em; color: var(--ink-2); text-transform: uppercase; }
+  h3 {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: clamp(24px, 4vw, 30px);
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h3 small { display: block; font-weight: 500; font-size: 0.6em; color: var(--ink-2); letter-spacing: 0; margin-top: 4px; }
+  .examples { font-family: var(--display); font-size: 15px; color: var(--ink-2); line-height: 1.5; }
+  .examples b { color: var(--ink); font-weight: 700; }
+
+  /* script excerpt */
+  .script {
+    background: var(--paper-2);
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 18px 22px 20px;
+    font-family: var(--mono);
+    font-size: 15px;
+    line-height: 1.45;
+    display: grid; gap: 12px;
+    overflow-x: auto;
+  }
+  .script .from { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+  .script .line { display: grid; gap: 1px; padding-left: 12%; }
+  .script .cue { text-transform: uppercase; letter-spacing: 0.04em; padding-left: 14%; }
+  .script .dlg { padding-right: 6%; }
+  .script .action { display: block; padding-left: 0; font-style: italic; color: var(--ink-2); grid-template-columns: 1fr; }
+  @media (max-width: 480px) { .script .line { padding-left: 0; } .script .cue { padding-left: 0; } }
+
+  .try, .pro { display: grid; grid-template-columns: 92px 1fr; gap: 14px; align-items: start; }
+  .try .tag, .pro .tag { font-family: var(--display); font-weight: 700; font-size: 12.5px; letter-spacing: 0.08em; text-transform: uppercase; padding-top: 5px; }
+  .try .tag { color: var(--ink); }
+  .try p { font-size: 17px; }
+  .pro { border-left: 3px solid var(--pen); padding: 10px 0 10px 16px; background: linear-gradient(90deg, var(--pen-soft), transparent 70%); border-radius: 0 6px 6px 0; }
+  .pro .tag { color: var(--pen); }
+  .pro p { font-size: 16.5px; line-height: 1.5; }
+  @media (max-width: 480px) { .try, .pro { grid-template-columns: 1fr; gap: 4px; } }
+
+  /* ---------- quotes ---------- */
+  .quotes { display: grid; gap: 18px; margin-block: 6px 22px; }
+  blockquote { margin: 0; font-family: var(--display); font-weight: 500; font-size: 20px; line-height: 1.3; letter-spacing: -0.01em; max-width: 30ch; text-wrap: balance; }
+  blockquote cite { display: block; font-style: normal; font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); margin-top: 6px; }
+  .gloss { font-size: 15.5px; color: var(--ink-2); }
+
+  /* ---------- scorecard ---------- */
+  .card { display: grid; gap: 0; border: 1.5px solid var(--ink); border-radius: 8px; overflow: hidden; margin-top: 8px; }
+  .card label {
+    display: grid; grid-template-columns: 30px 1fr; gap: 12px; align-items: start;
+    padding: 12px 16px; border-bottom: 1px solid var(--rule);
+    font-family: var(--display); font-size: 16px; line-height: 1.35; cursor: pointer;
+  }
+  .card label:last-of-type { border-bottom: 0; }
+  .card input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--pen); }
+  .card input:focus-visible { outline: 2px solid var(--pen); outline-offset: 2px; }
+  .score {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 14px 16px; background: var(--paper-2); border-top: 1.5px solid var(--ink);
+    font-family: var(--display); font-size: 15px;
+  }
+  .score .n { font-family: var(--mono); font-size: 22px; font-variant-numeric: tabular-nums; }
+  .score .verdict { color: var(--ink-2); }
+
+  /* ---------- workshop ---------- */
+  .steps { display: grid; gap: 0; margin-top: 8px; }
+  .step { display: grid; grid-template-columns: 64px 1fr; gap: 16px; padding: 12px 0; border-top: 1px solid var(--rule); align-items: baseline; }
+  .step:last-child { border-bottom: 1px solid var(--rule); }
+  .step .mins { font-family: var(--mono); font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .step p { font-size: 17px; }
+  .step b { font-family: var(--display); font-weight: 700; }
+
+  footer { padding-top: 40px; font-family: var(--display); font-size: 13.5px; color: var(--ink-2); line-height: 1.5; max-width: 60ch; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .card label { transition: background 120ms ease; }
+    .card label:hover { background: var(--paper-2); }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <div class="eyebrow">A field guide built from 85 of their ads</div>
+    <h1>The Creatably Playbook</h1>
+    <p class="dek">How one small studio writes comedy commercials that actually sell — broken into rules you can use tonight, whether it's your first script for class or your fortieth for a client.</p>
+    <div class="legend">
+      <span>Plain text is for everyone. <span class="hl">Highlighted lines</span> are the parts to remember.</span>
+      <span><span class="pen-tag">Pro Note</span> blocks are the professional layer — the craft detail behind each rule.</span>
+      <span>Script excerpts are lightly cleaned from YouTube's auto-captions of the real ads.</span>
+    </div>
+  </header>
+
+  <!-- ============ THE SHAPE ============ -->
+  <section>
+    <h2>Every ad is a three-act sitcom that happens to sell something.</h2>
+    <p class="kicker">Before any rule, learn the shape. It's the same in all 85 videos, and it's why they run two to four minutes instead of thirty seconds.</p>
+
+    <div class="beat">
+      <div class="beat-head"><span>BEAT SHEET · 3:00 SPOT</span><span>0:00 → 3:00</span></div>
+      <div class="beat-bar" aria-hidden="true"><div class="a1"></div><div class="a2"></div><div class="a3"></div><div class="a4"></div></div>
+      <div class="beat-labels">
+        <div class="a1"><span class="sw"></span><b>Cold open</b><span class="tc">0:00–0:35</span></div>
+        <div class="a2"><span class="sw"></span><b>The double-act</b><span class="tc">0:35–2:20</span></div>
+        <div class="a3"><span class="sw"></span><b>Proof</b><span class="tc">2:20–2:45</span></div>
+        <div class="a4"><span class="sw"></span><b>Exit</b><span class="tc">2:45–3:00</span></div>
+      </div>
+    </div>
+
+    <div class="acts">
+      <div class="act"><span class="tc">ACT I</span><p><b>Cold open.</b> Start <em>inside</em> a scene, in a genre that has nothing to do with the product. No logo, no "are you tired of…". <span class="hl">The product isn't named for the first 15 seconds.</span></p></div>
+      <div class="act"><span class="tc">ACT II</span><p><b>The double-act.</b> A Skeptic and an Expert trade questions and answers. <span class="hl">Every feature comes out as an answer to a doubtful question</span> — never as a list.</p></div>
+      <div class="act"><span class="tc">ACT III</span><p><b>Proof.</b> A fast burst of real customers, then the price reframed as something you've already bought.</p></div>
+      <div class="act"><span class="tc">EXIT</span><p><b>Say the website. End on the joke.</b> The URL gets said twice; the last line is a callback to the opening bit.</p></div>
+    </div>
+
+    <div class="pro" style="margin-top:26px">
+      <span class="tag">Pro Note</span>
+      <p>Two to four-and-a-half minutes isn't self-indulgence — it's the minimum for three acts. A :30 can't hold this structure. Creatably shoots the long version as the master and cuts the short ones down from it, so the cutdowns inherit the jokes and the proof.</p>
+    </div>
+  </section>
+
+  <!-- ============ THE RULES ============ -->
+  <section>
+    <h2>The nine rules</h2>
+    <p class="kicker">Ordered by how often they showed up across the 85 ads. Rule 3 is the one that shows up in almost every single one.</p>
+
+    <div class="rules">
+
+      <!-- Rule 1 -->
+      <article class="rule">
+        <div class="rule-head">
+          <span class="rule-num">Rule 1 · Genre</span>
+          <h3>Put the whole ad in a costume.<small>Pick a movie genre or TV format for its jokes, not for whether it matches the product.</small></h3>
+        </div>
+        <div class="prose">
+          <p>A heist. A police stop. A game show. A fairy tale. A medieval court. The ad borrows a format everyone already knows, so it doesn't feel like an ad while it's teaching you the pitch. <span class="hl">The genre is never chosen for relevance.</span> A mattress got the French Revolution. A credit union got a supervillain's lonely monologue.</p>
+          <p class="examples"><b>Bacon</b> (temp staffing) → spy movie &nbsp;·&nbsp; <b>Luminous</b> (inventory software) → Lord of the Rings &nbsp;·&nbsp; <b>Kizik</b> (shoes) → heist &nbsp;·&nbsp; <b>Lab Grown</b> (diamonds) → game show &nbsp;·&nbsp; <b>iSleep</b> (sleep apnea) → Snow White &nbsp;·&nbsp; <b>US Virtual Notary</b> → medieval kingdom</p>
+        </div>
+        <div class="script">
+          <div class="from">From: Cosset — "Speed" (bath bombs)</div>
+          <div class="line"><span class="cue">Bus driver</span><span class="dlg">Everybody remain calm. There are bombs on this bus.</span></div>
+          <div class="line"><span class="cue">Passenger</span><span class="dlg">Not again.</span></div>
+          <div class="line"><span class="cue">Hero</span><span class="dlg">Don't panic. You just need to keep this bus going twenty miles per hour. No more, no less.</span></div>
+          <div class="line"><span class="cue">Passenger</span><span class="dlg">That's so slow.</span></div>
+        </div>
+        <div class="try"><span class="tag">Try it</span><p>Write your product on a card. Pull a genre out of a hat — heist, courtroom, nature documentary, cooking show, horror. Pitch the first fifteen seconds out loud before you're allowed to say the product's name.</p></div>
+        <div class="pro"><span class="tag">Pro Note</span><p>A genre earns its place if you can list six of its tropes in under a minute — each trope is a free bit. Genre also pre-loads production design (wardrobe, sets, music cues), which is why these spots look more expensive than they are.</p></div>
+      </article>
+
+      <!-- Rule 2 -->
+      <article class="rule">
+        <div class="rule-head">
+          <span class="rule-num">Rule 2 · The villain</span>
+          <h3>Give the problem a face.<small>Don't describe the pain point. Cast it.</small></h3>
+        </div>
+        <div class="prose">
+          <p>Learning Dynamics turned a parent's anxiety into <b>Mama Doom</b>, an inner demon narrating worst-case scenarios. Sheets &amp; Giggles made overheating a demon under the bed. Squid Socks let the baby narrate his own sock-removal schemes like a Bond villain. <span class="hl">When the problem is a character, it can be beaten</span> — and the product beating it is your ending.</p>
+        </div>
+        <div class="script">
+          <div class="from">From: Learning Dynamics — "Mama Doom" (reading program)</div>
+          <div class="line"><span class="cue">Mom</span><span class="dlg">We've been here twenty minutes. It's <em>Hop on Pop</em>, not Shakespeare.</span></div>
+          <div class="line"><span class="cue">Mama Doom</span><span class="dlg">She probably won't get a job. Then wind up in jail.</span></div>
+          <div class="line"><span class="cue">Mom</span><span class="dlg">Maybe Lucy just won't be much of a reader.</span></div>
+          <div class="line"><span class="cue">Mama Doom</span><span class="dlg">Oh sure. She can just watch soaps all day.</span></div>
+        </div>
+        <div class="try"><span class="tag">Try it</span><p>Name your villain. What does it whisper to the customer at 2 a.m.? Write the one line it says that gets a laugh because it's a little bit true.</p></div>
+        <div class="pro"><span class="tag">Pro Note</span><p>The villain has to be something the product genuinely defeats in Act III, or the resolution reads as fake. Write the defeat first, then design the villain backward from it.</p></div>
+      </article>
+
+      <!-- Rule 3 -->
+      <article class="rule">
+        <div class="rule-head">
+          <span class="rule-num">Rule 3 · The engine</span>
+          <h3>Skeptic + Expert.<small>The one mechanic that runs nearly every ad, regardless of genre.</small></h3>
+        </div>
+        <div class="prose">
+          <p>Two characters. The <b>Skeptic</b> doubts, mocks, or doesn't get it. The <b>Expert</b> answers with a real fact about the product. The Skeptic reacts — <span class="hl">and the reaction is the joke.</span> Repeat eight to fifteen times. This is how an ad gets through a dozen features without ever sounding like a feature list: every spec is the answer to a question a real, doubtful customer would ask.</p>
+        </div>
+        <div class="script">
+          <div class="from">From: Aquavis — "Water Waiter" (under-sink filter)</div>
+          <div class="line"><span class="cue">Customer</span><span class="dlg">Never mind. I'll just get my pitcher filter.</span></div>
+          <div class="line"><span class="cue">Waiter</span><span class="dlg">When was the last time you changed that filter? Madam, you <em>have</em> to change those. Pitcher filters are only rated for forty to a hundred gallons. The AquaVis filter delivers five hundred gallons between changes.</span></div>
+          <div class="line"><span class="cue">Customer</span><span class="dlg">This pitcher only lasts, like, a day. Or one Stanley mug, if I have to refill it.</span></div>
+        </div>
+        <div class="try"><span class="tag">Try it</span><p>List the five questions a doubtful friend would ask about your product — those are the Skeptic's lines. Answer each in one true sentence — those are the Expert's. Now give the Skeptic a reaction to every answer. You just wrote Act II.</p></div>
+        <div class="pro"><span class="tag">Pro Note</span><p>The Skeptic's questions are your objection list from sales calls — write those before a single joke. The Expert almost never gets the punchline; the laughs live in the Skeptic's reactions. If a feature can't be phrased as the answer to a question, it doesn't go in the ad.</p></div>
+      </article>
+
+      <!-- Rule 4 -->
+      <article class="rule">
+        <div class="rule-head">
+          <span class="rule-num">Rule 4 · Numbers</span>
+          <h3>A stat, then a joke.<small>Within one line. Every time.</small></h3>
+        </div>
+        <div class="prose">
+          <p>Real statistics show up constantly — testosterone down 50% since 1975, carpets absorb forty pounds of dirt a year, a billion people have sleep apnea. And <span class="hl">every number is followed within one line by a punchline</span> that lets the audience off the hook. The number never gets to sit there and feel like a slide.</p>
+        </div>
+        <div class="script">
+          <div class="from">From: Tearribles — "Crime Scene" (dog toys)</div>
+          <div class="line"><span class="cue">Narrator</span><span class="dlg">A study from Texas A&amp;M found that nearly fifty percent of dogs suffer from anxiety, and almost ninety percent have some kind of behavioral issue. And you do <em>not</em> want to go to dog therapy.</span></div>
+          <div class="line"><span class="cue">Dog (on the couch)</span><span class="dlg">They always blame the dog, Mom.</span></div>
+        </div>
+        <div class="try"><span class="tag">Try it</span><p>Find one real number about the problem your product solves. Write three jokes about the number. Keep the shortest one.</p></div>
+        <div class="pro"><span class="tag">Pro Note</span><p>The joke should be <em>about</em> the stat, not a non-sequitur after it — the laugh is what makes the number stick. Put the source on screen; it costs nothing, and the joke has already bought you the trust to be believed.</p></div>
+      </article>
+
+      <!-- Rule 5 -->
+      <article class="rule">
+        <div class="rule-head">
+          <span class="rule-num">Rule 5 · Proof</span>
+          <h3>Prove it on camera.<small>Where another ad would show a chart, they run a test.</small></h3>
+        </div>
+        <div class="prose">
+          <p>Wet Cat burns two towels to show which one is real cotton. ZeroRes cleans half a carpet and lets a food court walk on both halves. Watertech shakes two jars of water with soap. <span class="hl">Product and old way, side by side, in the same frame.</span> It's a comparison chart you can't look away from.</p>
+        </div>
+        <div class="script">
+          <div class="from">From: Wet Cat — "Foundational" (Turkish towels)</div>
+          <div class="line"><span class="cue">Wife</span><span class="dlg">The other Turkish towels claim they're one hundred percent cotton. But fire doesn't lie.</span></div>
+          <div class="line"><span class="action">She lights the competitor's towel. It melts.</span></div>
+          <div class="line"><span class="cue">Wife</span><span class="dlg">Black smoke. That means it's blended with polyester — a.k.a. plastic.</span></div>
+          <div class="line"><span class="cue">Husband</span><span class="dlg">So the people on the internet lied? Is nothing sacred anymore?</span></div>
+        </div>
+        <div class="try"><span class="tag">Try it</span><p>What's the simplest test someone could do at their kitchen table that shows your product winning? Describe it in one sentence. If you can't, find a different claim.</p></div>
+        <div class="pro"><span class="tag">Pro Note</span><p>One variable. Both sides visible in the same shot. Narrated by the Skeptic's reaction, not the Expert's claim — the audience trusts a bystander's "wait, what?" more than a spokesperson's "as you can see."</p></div>
+      </article>
+
+      <!-- Rule 6 -->
+      <article class="rule">
+        <div class="rule-head">
+          <span class="rule-num">Rule 6 · Price</span>
+          <h3>Price is a comparison, never a number.<small>"Less than three Stanley mugs."</small></h3>
+        </div>
+        <div class="prose">
+          <p>A mined diamond costs "six months' salary." A period cup "lasts as long as your passport." <span class="hl">The price is always translated into something the audience has already bought without guilt</span> — so the purchase feels like something they already do, not a new decision.</p>
+        </div>
+        <div class="script">
+          <div class="from">From: Aquavis — "Water Waiter"</div>
+          <div class="line"><span class="cue">Customer</span><span class="dlg">I don't know if I can afford it.</span></div>
+          <div class="line"><span class="cue">Waiter</span><span class="dlg">You can get AquaVis for less than three Stanley mugs.</span></div>
+          <div class="line"><span class="cue">Customer</span><span class="dlg">I've definitely bought more than three Stanley mugs.</span></div>
+          <div class="line"><span class="cue">Waiter</span><span class="dlg">Yes. I am aware.</span></div>
+        </div>
+        <div class="try"><span class="tag">Try it</span><p>Finish the sentence: "It costs less than ______." Aim for something your audience is slightly embarrassed to have spent money on.</p></div>
+        <div class="pro"><span class="tag">Pro Note</span><p>Anchor to an item from the same wallet: an impulse buy for impulse products, a monthly bill for subscriptions, a lifetime total for anything with a ten-year lifespan. The comparison should also do the math for them.</p></div>
+      </article>
+
+      <!-- Rule 7 -->
+      <article class="rule">
+        <div class="rule-head">
+          <span class="rule-num">Rule 7 · Testimonials</span>
+          <h3>Bunch the real people at the end.<small>Three to five quick clips, right before the website.</small></h3>
+        </div>
+        <div class="prose">
+          <p>Real customers don't get sprinkled through the ad. They arrive as <span class="hl">one fast burst at roughly the 75–85% mark</span> — just after the jokes wind down, just before the URL gets repeated. It's the moment the ad switches from "entertained" to "convinced."</p>
+        </div>
+        <div class="try"><span class="tag">Try it</span><p>Watch any one of these ads and write down the timestamp when the first real customer appears. Then check it against the runtime.</p></div>
+        <div class="pro"><span class="tag">Pro Note</span><p>Rough audio and unrehearsed phrasing read as real — don't over-polish this beat. Cut fast, three to five voices, no names on screen unless they add credibility. This is the beat that closes the sale the comedy opened.</p></div>
+      </article>
+
+      <!-- Rule 8 -->
+      <article class="rule">
+        <div class="rule-head">
+          <span class="rule-num">Rule 8 · The exit</span>
+          <h3>Say the website twice. End on the joke.<small>The last line is almost never the URL.</small></h3>
+        </div>
+        <div class="prose">
+          <p>The site name gets said clearly at least twice — once mid-ad, once at the close. But <span class="hl">the actual last line is a callback to the cold open</span>, not the call to action. It's what makes the ad feel like a short film instead of a commercial, and it's why people send it to a friend.</p>
+        </div>
+        <div class="script">
+          <div class="from">From: iSleep — "Snow White" (sleep apnea testing)</div>
+          <div class="line"><span class="cue">Snow White</span><span class="dlg">Visit iSleep.com, where a better night's sleep is no fairy tale.</span></div>
+          <div class="line"><span class="action">The seven dwarfs march off to the mine.</span></div>
+          <div class="line"><span class="cue">Snow White</span><span class="dlg">Bring me back a diamond, boys.</span></div>
+        </div>
+        <div class="try"><span class="tag">Try it</span><p>Write your last line as a joke that only makes sense if you watched the first ten seconds.</p></div>
+        <div class="pro"><span class="tag">Pro Note</span><p>The callback makes it rewatchable and shareable; the URL makes it accountable. Both, in that order. Say the URL at conversational speed and spell out anything ambiguous — auto-captions garbled half the site names in these ads, which means viewers do too.</p></div>
+      </article>
+
+      <!-- Rule 9 -->
+      <article class="rule">
+        <div class="rule-head">
+          <span class="rule-num">Rule 9 · Wordplay</span>
+          <h3>Puns are structure, not filler.<small>"Stop squatting. Start towing."</small></h3>
+        </div>
+        <div class="prose">
+          <p>Brand names get worked into wordplay relentlessly. Some ads open in rhyme (DryTote: "got soggy bins? worried what the damper is doing to your camper?"). Catalyst Pet closes on "keep the cat, ditch the smell." <span class="hl">The puns are doing a job: telling the audience "this is entertainment, relax."</span></p>
+        </div>
+        <div class="try"><span class="tag">Try it</span><p>Write five puns on your brand name. Four will be bad. Keep the fifth for the tagline.</p></div>
+        <div class="pro"><span class="tag">Pro Note</span><p>Pun density is highest in the cold open and the exit — the two places the viewer decides whether to keep watching and whether to click. Act II stays cleaner so the facts land.</p></div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ============ IN THEIR WORDS ============ -->
+  <section>
+    <h2>They say the formula out loud.</h2>
+    <p class="kicker">Six of the 85 videos are Creatably advertising itself. In those, the philosophy isn't hidden in subtext.</p>
+    <div class="quotes">
+      <blockquote>"With influencers, your brand is just a prop. With Creatably, your brand is the star."<cite>Creatably — "Influencer Mill"</cite></blockquote>
+      <blockquote>"We don't just tell a good story. We put our money where our mouth is."<cite>Creatably — "We are Creatably"</cite></blockquote>
+      <blockquote>"Is it awesome yet? … How about now?"<cite>Creatably — "Million Dollar Ad" (their editing question)</cite></blockquote>
+    </div>
+    <div class="prose">
+      <p>Every campaign they cite comes with a number attached — a 10× or 30× ROAS, revenue tripled, "$10 million in closed revenue." <span class="gloss">(ROAS is return on ad spend: dollars earned per dollar of ads. If that term is new to you, it's the only piece of jargon in this guide.)</span></p>
+    </div>
+    <div class="pro" style="margin-top:20px"><span class="tag">Pro Note</span><p>They cameo their own past clients inside new clients' ads — Pillow Cube turns up in the Creatably reel <em>and</em> in a mattress spot, Thread Wallets in two others. It reads as a running gag and works as a portfolio flex. If you build a body of work, let it reference itself.</p></div>
+  </section>
+
+  <!-- ============ SCORECARD ============ -->
+  <section>
+    <h2>Grade a script.</h2>
+    <p class="kicker">Ten checks. Works on your own draft, a classmate's, or the ad a client sent you as a reference. Your checks stay on this device.</p>
+    <div class="card" id="scorecard">
+      <label><input type="checkbox" id="c1"> Opens inside a scene; the product isn't named for at least 15 seconds.</label>
+      <label><input type="checkbox" id="c2"> The genre was chosen for its jokes, not for matching the product.</label>
+      <label><input type="checkbox" id="c3"> The problem is a character, not a description.</label>
+      <label><input type="checkbox" id="c4"> Every feature is the answer to a Skeptic's question.</label>
+      <label><input type="checkbox" id="c5"> Every statistic has a joke within one line.</label>
+      <label><input type="checkbox" id="c6"> At least one side-by-side test happens on camera.</label>
+      <label><input type="checkbox" id="c7"> Price is a comparison to something already bought.</label>
+      <label><input type="checkbox" id="c8"> Three to five testimonials, clustered right before the close.</label>
+      <label><input type="checkbox" id="c9"> The website is said clearly twice.</label>
+      <label><input type="checkbox" id="c10"> The last line is a callback joke, not the URL.</label>
+      <div class="score"><span><span class="n" id="scoreN">0</span> / 10</span><span class="verdict" id="verdict">Check the boxes as you read.</span></div>
+    </div>
+  </section>
+
+  <!-- ============ WORKSHOP ============ -->
+  <section>
+    <h2>Write one in 45 minutes.</h2>
+    <p class="kicker">A single class period or a writers' room warm-up. Works solo or in pairs. Read it aloud at the end and time it.</p>
+    <div class="steps">
+      <div class="step"><span class="mins">5 min</span><p><b>Product and villain.</b> One sentence on what it does. One sentence on what the villain whispers.</p></div>
+      <div class="step"><span class="mins">5 min</span><p><b>Draw a genre.</b> List six of its tropes fast. Circle the two funniest.</p></div>
+      <div class="step"><span class="mins">10 min</span><p><b>Build the engine.</b> Eight Skeptic questions → eight true Expert answers → eight Skeptic reactions.</p></div>
+      <div class="step"><span class="mins">10 min</span><p><b>Cold open, test, price.</b> Fifteen seconds of scene before the name. One on-camera comparison. One "costs less than ___" line.</p></div>
+      <div class="step"><span class="mins">10 min</span><p><b>The close.</b> Three testimonial placeholders, the URL twice, and a last line that only works if you saw the opening.</p></div>
+      <div class="step"><span class="mins">5 min</span><p><b>Read it aloud.</b> Target 2:00–4:00. Under two minutes, you're missing an act. Over four-thirty, cut Skeptic questions, not jokes.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    Source: transcripts of every video over two minutes on Creatably's YouTube channel (90 qualified; 85 had English auto-captions; the 2018 and 2019 demo reels, "Is This Your Ad?", "Don't Drop the Soap," and "Fairy Godmother" had none). Script excerpts are cleaned from auto-captions and may differ slightly from the spoken line. Not affiliated with Creatably.
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('#scorecard input[type="checkbox"]'));
+    var nEl = document.getElementById('scoreN');
+    var vEl = document.getElementById('verdict');
+    var KEY = 'creatably-playbook-scorecard';
+
+    function verdict(n) {
+      if (n === 0) return 'Check the boxes as you read.';
+      if (n >= 9) return 'That’s a Creatably ad.';
+      if (n >= 7) return 'Close. Look at what’s unchecked — usually the exit or the villain.';
+      if (n >= 5) return 'It’s got the bones. Rebuild Act II as questions and answers.';
+      return 'It’s a commercial. Start with Rule 1.';
+    }
+    function render() {
+      var n = boxes.filter(function (b) { return b.checked; }).length;
+      nEl.textContent = n;
+      vEl.textContent = verdict(n);
+      try { localStorage.setItem(KEY, JSON.stringify(boxes.map(function (b) { return b.checked; }))); } catch (e) {}
+    }
+    try {
+      var saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (Array.isArray(saved)) boxes.forEach(function (b, i) { b.checked = !!saved[i]; });
+    } catch (e) {}
+    boxes.forEach(function (b) { b.addEventListener('change', render); });
+    render();
+  })();
+</script>
